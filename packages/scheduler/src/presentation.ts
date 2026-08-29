@@ -31,10 +31,11 @@ export function renderDashboard(useColor: boolean): string {
 export function renderResultSummary(input: ResultSummaryInput): string {
   switch (input.status) {
     case "failure":
+      const artifactPath = input.artifactPath ?? "failure.json";
       return [
         `Failure found after ${input.testedSchedules ?? 0} schedules.`,
-        `Saved replay artifact: ${input.artifactPath ?? "failure.json"}`,
-        `Replay: race-debugger replay ${input.artifactPath ?? "failure.json"}`
+        `Saved replay artifact: ${artifactPath}`,
+        `Replay: race-debugger replay ${quotePowerShellArgument(artifactPath)}`
       ].join("\n");
     case "no-failure":
       return `No failure found after ${input.testedSchedules ?? 0} schedules.`;
@@ -43,4 +44,8 @@ export function renderResultSummary(input: ResultSummaryInput): string {
     case "not-reproduced":
       return "Replay did not reproduce expected failure.";
   }
+}
+
+function quotePowerShellArgument(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
 }
