@@ -1,214 +1,138 @@
 # Distributed Startup Race Debugger
 
 ## Mission
+Build a dynamic debugger for startup-order and readiness race conditions in Docker Compose applications.
 
-Build a debugger for startup-order and readiness race conditions in
-containerized distributed applications.
+The system must actively perturb startup timing, observe execution, detect failures, minimize failing schedules, and replay them.
 
-The tool must actively manipulate startup timing, observe the resulting
-execution, detect failures, minimize failing schedules, and reproduce them.
-
-## Core Principle
-
-This is a dynamic debugger.
-
-Do NOT reduce the project to:
-
+## Non-Goals
+Do not reduce the project to:
 - AI log summarization
-- log classification
-- Docker Compose linting
-- dependency graph visualization
-- static configuration analysis
+- static Docker Compose linting
+- dependency graph visualization only
 - an LLM wrapper around container logs
 
-AI may explain a discovered failure, but it must not be responsible for
-deciding whether the race actually occurred.
+LLMs may explain evidence, but must not decide whether a failure occurred.
 
-## Required Core Pipeline
+## Core Pipeline
 
+```text
 docker-compose.yml
-    ↓
-Compose / Service Model
-    ↓
-Schedule Generator
-    ↓
-Startup Perturbation
-    ↓
-Docker Runtime Controller
-    ↓
-Runtime Event Collector
-    ↓
-Failure Oracle
-    ↓
-Failing Schedule
-    ↓
-Schedule Minimizer
-    ↓
-Replay Artifact
-    ↓
-Deterministic Replay
-    ↓
-Timeline / Explanation UI
+  -> Compose / Service Model
+  -> Schedule Generator
+  -> Startup Perturbation
+  -> Docker Runtime Controller
+  -> Runtime Event Collector
+  -> Failure Oracle
+  -> Failing Schedule
+  -> Schedule Minimizer
+  -> Replay Artifact
+  -> Deterministic Replay
+  -> Timeline UI
+```
 
-The implementation details may change.
+The discover -> minimize -> replay architecture is fixed for the hackathon MVP.
 
-The fundamental discover → minimize → replay architecture must remain.
+## Shared Source of Truth
+Read these before implementation:
+- `docs/plan.md` — overall architecture and team integration
+- `docs/contracts/shared-contracts.md` — cross-team interfaces
+- `docs/plans/akil.md` — Akil ownership
+- `docs/plans/riya.md` — Riya ownership
+- `docs/plans/shriya.md` — Shriya ownership
+- `docs/integration.md` — merge and integration checkpoints
+- `docs/runbooks/demo.md` — golden demo definition
 
-## Primary Hackathon Goal
+## Team Ownership
 
-Build the smallest convincing end-to-end implementation first.
+### Akil — Schedule Exploration Engine
+Owns:
+- schedule representation and candidate generation
+- search loop
+- minimization
+- failure artifact serialization
+- CLI orchestration
 
-The golden demo should demonstrate:
+Does not own:
+- Docker lifecycle implementation
+- readiness/failure oracle implementation
 
-1. A distributed application normally starts successfully.
-2. The debugger explores a different startup timing.
-3. The altered timing exposes a real startup race.
-4. The failure is detected automatically.
-5. The debugger records the triggering schedule.
-6. The schedule is minimized.
-7. The minimized schedule is saved.
-8. Replay reproduces the same failure.
-9. A timeline explains what happened.
+### Riya — Docker Runtime
+Owns:
+- Compose project control
+- clean reset between experiments
+- controlled service startup
+- delay injection
+- physical replay execution
+- Docker logs/metadata collection
 
-## Golden Fixture
+Does not own:
+- search strategy
+- pass/fail semantics
 
-The first fixture should be intentionally vulnerable.
+### Shriya — Proof Layer
+Owns:
+- intentionally vulnerable demo stack
+- HTTP/TCP readiness probes
+- deterministic pass/fail oracle
+- timeline events
+- demo reliability
 
-Example:
+Does not own:
+- schedule search
+- Docker orchestration policy
 
-Database
-    ↓
-API
+## Replay Boundary
 
-The API assumes the database is ready immediately and performs an initial
-connection without sufficient retry/readiness handling.
+```text
+Akil CLI reads failure.json
+  -> Riya executes minimized Schedule
+  -> Shriya evaluates the run
+  -> Akil reports replay success/failure
+```
 
-Normal execution:
+No duplicate replay implementation across packages.
 
-database starts
-→ database becomes ready
-→ API starts
-→ connection succeeds
+## Shared Contracts
+All packages must import shared types from the contracts package. Do not create local incompatible copies of `Schedule`, `TimelineEvent`, `RunResult`, or `FailureArtifact`.
 
-Race execution:
+Contract changes require checking all three owners before merge.
 
-database starts
-→ API starts too early
-→ API connects
-→ database is not ready
-→ startup failure
+## Definition of Done
+A race is only considered discovered when:
+1. normal startup succeeds
+2. an explored schedule causes a real failure
+3. failure is detected automatically
+4. the triggering schedule is saved
+5. unnecessary perturbations are minimized
+6. replay reproduces the expected failure
+7. timeline evidence explains the ordering
 
-The debugger should discover the problematic timing rather than being told
-exactly which delay produces it.
-
-## Failure Oracle
-
-Prefer machine-verifiable signals.
-
-Possible signals:
-
-- non-zero process exit
-- Docker health status
-- container restart
-- TCP connection failure
-- HTTP readiness failure
-- dependency connection refusal
-- startup timeout
-- expected service unavailable
-- explicit fixture invariant violation
-
-Do not rely solely on LLM interpretation.
-
-## Replay
-
-Every discovered bug must produce a reproducible artifact.
-
-Conceptually:
-
-race-debugger replay failing-schedule.json
-
-Replay must recreate the relevant timing perturbation and verify that the
-expected failure occurs.
-
-If replay does not reproduce the failure, the bug is not considered
-successfully discovered.
-
-## Minimization
-
-Once a failing schedule is discovered, eliminate unnecessary perturbations.
-
-The final result should contain the smallest practical set of timing changes
-required to reproduce the bug.
-
-Prefer deterministic algorithms such as delta debugging or equivalent
-reduction strategies.
-
-## Development Priorities
-
-In order:
-
-1. Golden vulnerable fixture
-2. Docker runtime control
-3. Startup perturbation
-4. Runtime observation
-5. Failure oracle
-6. Failing schedule serialization
-7. Replay
-8. Schedule minimization
-9. Timeline visualization
-10. Multiple race patterns
-11. UX and polish
-
-Do not prioritize authentication, billing, cloud deployment, user management,
-marketing pages, or unrelated platform infrastructure.
+If replay fails to reproduce the failure, the feature is not done.
 
 ## Engineering Rules
+- Prefer deterministic behavior over LLM judgment.
+- Write tests for deterministic components.
+- Never claim something works without running the relevant test/demo.
+- Keep modules narrow and interfaces explicit.
+- Prefer the smallest working primitive over a sophisticated abstraction.
+- Do not add auth, billing, cloud deployment, accounts, or unrelated platform work before the core debugger works.
 
-Use tests for important deterministic components.
+## Codex / Superpowers Workflow
+Before implementation:
+1. read this file
+2. read `docs/plan.md`
+3. read the assigned owner's plan
+4. use Superpowers planning before coding
 
-Before claiming something works:
+For independent tasks, subagents may be used, but they must not redesign cross-team interfaces.
 
-- run the relevant tests
-- run the golden fixture
-- confirm the actual output
-- verify replay where applicable
+Use verification-before-completion before declaring milestones complete.
 
-Do not claim successful execution without evidence.
-
-## Agent Delegation
-
-Use parallel agents only for genuinely independent tasks.
-
-Good parallel investigation areas include:
-
-- Docker / Compose runtime control
-- schedule exploration algorithms
-- failure oracle design
-- schedule minimization
-- timeline visualization
-- adversarial fixture design
-
-The primary agent owns architectural integration.
-
-Subagents should not independently redesign the overall product.
-
-## Git
-
-Make small logical commits.
-
-Do not perform destructive Git operations unless explicitly necessary.
-
-Use worktrees when multiple implementation agents need to modify independent
-parts of the project simultaneously.
-
-## Hackathon Constraint
-
-Prefer:
-
-working primitive > sophisticated abstraction
-
-deterministic behavior > AI inference
-
-visible technical depth > unnecessary feature count
-
-reproducible demo > broad unsupported claims
+## Git Rules
+- Work on separate feature branches.
+- Make small logical commits.
+- Merge shared contracts before dependent work.
+- Pull/rebase shared changes before integration.
+- Avoid destructive Git operations.
+- Do not wait until Day 3 to integrate.
