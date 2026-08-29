@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   DockerRuntimeController,
+  RunTimeoutError,
   type ComposeRuntime,
   type Delay,
   type ObservationSnapshot,
@@ -179,6 +180,27 @@ describe("DockerRuntimeController", () => {
       id: "failed-api-before-postgres",
       perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
     }, ["api", "postgres"])).rejects.toThrow("cannot start api");
+
+    delay.release();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(compose.actions).not.toContain("start:postgres");
+    expect(compose.actions.at(-1)).toBe("stop");
+  });
+
+  it("cancels a delayed independent start when the run times out", async () => {
+    const compose = new RecordingCompose();
+    const delay = new BlockingDelay();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay,
+      observer: new RecordingObserver(),
+      runTimeoutMs: 10,
+    });
+
+    await expect(controller.runSchedule({
+      id: "timed-out-before-postgres",
+      perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
+    }, ["postgres"])).rejects.toBeInstanceOf(RunTimeoutError);
 
     delay.release();
     await new Promise<void>((resolve) => setTimeout(resolve, 0));

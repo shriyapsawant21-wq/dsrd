@@ -110,7 +110,7 @@ export class DockerRuntimeController {
     );
     const independentlyScheduled = [...startDelays.values()].some((delayMs) => delayMs > 0);
     if (independentlyScheduled) {
-      await this.startIndependently(serviceOrder, startDelays);
+      await this.startIndependently(serviceOrder, startDelays, signal);
     } else {
       for (const service of serviceOrder) {
         await this.options.delay.wait(0);
@@ -143,8 +143,15 @@ export class DockerRuntimeController {
   private async startIndependently(
     serviceOrder: string[],
     startDelays: ReadonlyMap<string, number>,
+    signal: AbortSignal,
   ): Promise<void> {
     const cancellation = new AbortController();
+    const cancelForRunAbort = () => cancellation.abort(signal.reason);
+    if (signal.aborted) {
+      cancelForRunAbort();
+    } else {
+      signal.addEventListener("abort", cancelForRunAbort, { once: true });
+    }
     const starts = serviceOrder.map(async (service) => {
       await this.waitForDelay(startDelays.get(service) ?? 0, cancellation.signal);
       cancellation.signal.throwIfAborted();
@@ -157,6 +164,8 @@ export class DockerRuntimeController {
       cancellation.abort(error);
       await Promise.allSettled(starts);
       throw error;
+    } finally {
+      signal.removeEventListener("abort", cancelForRunAbort);
     }
   }
 
