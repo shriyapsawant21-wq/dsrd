@@ -17,3 +17,13 @@ export {
 } from "./probes/tcp.js";
 export type { ReadinessObservation } from "./probes/types.js";
 export { buildTimeline } from "./timeline.js";
+export { parseLogEvidence } from "./logs/parse.js";
+export type {
+  LogFailureCategory,
+  LogFailureEvidence,
+  ParsedLogEvidence,
+} from "./logs/types.js";
+export {
+  RuntimeProofObserver,
+  type RuntimeProofObserverOptions,
+} from "./runtime-proof-observer.js";

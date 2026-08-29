@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@dsrd/contracts": "0.1.0"
+    "@dsrd/contracts": "0.1.0",
+    "@dsrd/runtime": "0.1.0"
   }
 }

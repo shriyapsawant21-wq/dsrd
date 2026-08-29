@@ -21,6 +21,47 @@ function failedResult(
 }
 
 export function evaluateRun(input: ObservationSnapshot): RunResult {
+  const apiHttp = input.readiness.find(
+    (observation) =>
+      observation.service === "api" && observation.kind === "http",
+  );
+  const postgresTcp = input.readiness.find(
+    (observation) =>
+      observation.service === "postgres" && observation.kind === "tcp",
+  );
+  const apiRunning = input.containers.some(
+    (container) =>
+      container.service === "api" && container.state === "running",
+  );
+  const workerExitedZero = input.containers.some(
+    (container) =>
+      container.service === "worker" &&
+      container.state === "exited" &&
+      container.exitCode === 0,
+  );
+
+  if (
+    apiHttp?.status === "ready" &&
+    postgresTcp?.status === "ready" &&
+    apiRunning &&
+    workerExitedZero
+  ) {
+    return {
+      scheduleId: input.scheduleId,
+      status: "pass",
+      events: buildTimeline(input),
+      logs: [...input.logs],
+    };
+  }
+
+  const logFailure = input.logFailures[0];
+  if (logFailure !== undefined) {
+    return failedResult(
+      input,
+      `${logFailure.summary} (${logFailure.service})`,
+    );
+  }
+
   const apiExitedNonZero = input.containers.some(
     (container) =>
       container.service === "api" &&
@@ -35,10 +76,6 @@ export function evaluateRun(input: ObservationSnapshot): RunResult {
     );
   }
 
-  const apiHttp = input.readiness.find(
-    (observation) =>
-      observation.service === "api" && observation.kind === "http",
-  );
   if (
     apiHttp !== undefined &&
     (apiHttp.status === "timeout" || apiHttp.status === "unhealthy")
@@ -63,40 +100,11 @@ export function evaluateRun(input: ObservationSnapshot): RunResult {
     );
   }
 
-  const postgresTcp = input.readiness.find(
-    (observation) =>
-      observation.service === "postgres" && observation.kind === "tcp",
-  );
   if (postgresTcp !== undefined && postgresTcp.status !== "ready") {
     return failedResult(
       input,
       "PostgreSQL did not become ready before the startup deadline",
     );
-  }
-
-  const apiRunning = input.containers.some(
-    (container) =>
-      container.service === "api" && container.state === "running",
-  );
-  const workerExitedZero = input.containers.some(
-    (container) =>
-      container.service === "worker" &&
-      container.state === "exited" &&
-      container.exitCode === 0,
-  );
-
-  if (
-    apiHttp?.status === "ready" &&
-    postgresTcp?.status === "ready" &&
-    apiRunning &&
-    workerExitedZero
-  ) {
-    return {
-      scheduleId: input.scheduleId,
-      status: "pass",
-      events: buildTimeline(input),
-      logs: [...input.logs],
-    };
   }
 
   return failedResult(input, "Run ended without complete pass evidence");

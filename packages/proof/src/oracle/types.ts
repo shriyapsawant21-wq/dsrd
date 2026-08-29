@@ -1,6 +1,7 @@
 import type { TimelineEvent } from "@dsrd/contracts";
 
 import type { ReadinessObservation } from "../probes/types.js";
+import type { LogFailureEvidence } from "../logs/types.js";
 
 export type ContainerObservation = {
   service: string;
@@ -15,5 +16,6 @@ export type ObservationSnapshot = {
   containers: ContainerObservation[];
   readiness: ReadinessObservation[];
   fixtureEvents: TimelineEvent[];
+  logFailures: LogFailureEvidence[];
   logs: string[];
 };

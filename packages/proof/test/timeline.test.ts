@@ -38,6 +38,7 @@ describe("timeline construction", () => {
           detail: "ECONNREFUSED",
         },
       ],
+      logFailures: [],
       logs: [],
     };
 
@@ -75,6 +76,7 @@ describe("timeline construction", () => {
         { timeMs: 5, service: "api", event: "z_event" },
         { timeMs: 5, service: "api", event: "a_event" },
       ],
+      logFailures: [],
       logs: [],
     };
 

@@ -34,6 +34,7 @@ function passingSnapshot(): ObservationSnapshot {
     fixtureEvents: [
       { timeMs: 100, service: "worker", event: "work_succeeded" },
     ],
+    logFailures: [],
     logs: ["historical text containing ECONNREFUSED is not an oracle"],
   };
 }
@@ -133,5 +134,39 @@ describe("deterministic failure oracle", () => {
       status: "fail",
       failureReason: "Run ended without complete pass evidence",
     });
+  });
+
+  it("uses deterministic parsed evidence to explain an incomplete run", () => {
+    const snapshot = passingSnapshot();
+    snapshot.containers = snapshot.containers.filter(
+      (container) => container.service !== "worker",
+    );
+    snapshot.logFailures = [
+      {
+        service: "api",
+        category: "connection_refused",
+        summary: "PostgreSQL connection was refused",
+        raw: "api-1 | connect ECONNREFUSED postgres:5432",
+      },
+    ];
+
+    expect(evaluateRun(snapshot)).toMatchObject({
+      status: "fail",
+      failureReason: "PostgreSQL connection was refused (api)",
+    });
+  });
+
+  it("does not let parsed historical errors override complete pass evidence", () => {
+    const snapshot = passingSnapshot();
+    snapshot.logFailures = [
+      {
+        service: "api",
+        category: "connection_refused",
+        summary: "PostgreSQL connection was refused",
+        raw: "old error",
+      },
+    ];
+
+    expect(evaluateRun(snapshot).status).toBe("pass");
   });
 });
