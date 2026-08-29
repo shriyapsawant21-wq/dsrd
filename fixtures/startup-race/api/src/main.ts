@@ -1,4 +1,5 @@
 import { Client } from "pg";
+import { createClient } from "redis";
 
 import { initializeApi, type FixtureEvent } from "./app.js";
 
@@ -30,8 +31,21 @@ async function connectOnce(): Promise<void> {
   }
 }
 
+async function connectCacheOnce(): Promise<void> {
+  const client = createClient({
+    url: `redis://${process.env.CACHE_HOST ?? "cache"}:${process.env.CACHE_PORT ?? "6379"}`,
+    socket: { connectTimeout: connectionTimeoutMillis },
+  });
+  try {
+    await client.connect();
+    await client.ping();
+  } finally {
+    if (client.isOpen) await client.quit().catch(() => undefined);
+  }
+}
+
 try {
-  const app = await initializeApi(connectOnce, emit);
+  const app = await initializeApi(connectOnce, connectCacheOnce, emit);
   app.listen(port, "0.0.0.0", () => {
     console.log(
       JSON.stringify({ service: "api", event: "http_server_listening" }),

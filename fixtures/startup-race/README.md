@@ -1,15 +1,17 @@
 # Startup Race Fixture
 
-This fixture is the proof layer's intentionally vulnerable demonstration application. It contains three real services:
+This fixture is the proof layer's intentionally vulnerable demonstration application. It contains four real services:
 
 ```text
 postgres -> api -> worker
+cache ------^
 ```
 
 ## What each service does
 
 - `postgres` runs the official PostgreSQL image through `postgres/delayed-entrypoint.sh`. `POSTGRES_START_DELAY_MS` defaults to `0`; a controlled experiment may set it to a non-negative millisecond delay.
-- `api` performs one `SELECT 1` startup check. It starts Express only after that check succeeds. It intentionally does not retry, so an early start while PostgreSQL is unavailable emits `db_connection_failed` and exits non-zero.
+- `cache` runs Redis and supplies a second real backend dependency without adding UI work or another intentional race.
+- `api` performs one PostgreSQL `SELECT 1` and one Redis `PING` startup check. It starts Express only after both succeed. It intentionally does not retry, so an early start while PostgreSQL is unavailable emits `db_connection_failed` and exits non-zero.
 - `worker` makes one request to `GET /work`. It emits `work_succeeded` and exits zero only for HTTP 200 plus `{ "status": "processed" }`.
 
 ## Why normal startup passes
@@ -17,7 +19,9 @@ postgres -> api -> worker
 The normal Compose dependencies are health-gated:
 
 ```text
-PostgreSQL healthy -> API starts and becomes healthy -> worker starts
+PostgreSQL healthy --\
+                     -> API starts and becomes healthy -> worker starts
+Redis healthy -------/
 ```
 
 Run the bounded verification helper:
@@ -26,11 +30,11 @@ Run the bounded verification helper:
 powershell -ExecutionPolicy Bypass -File fixtures/startup-race/scripts/verify-normal.ps1 -Runs 3
 ```
 
-The helper requires PostgreSQL and API to become healthy and the worker to exit with code 0.
+The helper requires PostgreSQL, Redis, and API to become healthy and the worker to exit with code 0.
 
 ## Why the intended timing fails
 
-The race helper prebuilds images, delays the PostgreSQL process, then starts the API immediately with Compose dependency startup disabled for that command:
+The race helper starts healthy Redis, delays the PostgreSQL process, then starts the API immediately with Compose dependency startup disabled for that command:
 
 ```text
 PostgreSQL container starts but process sleeps
@@ -52,7 +56,12 @@ The non-zero API exit is the primary machine-verifiable failure signal. The stru
 ## Local ports
 
 - PostgreSQL: `localhost:55432`
+- Redis: `localhost:56379`
 - API health: `http://localhost:53000/health`
+
+## Replay schedule
+
+`schedules/postgres-startup-race.json` is the four-service example schedule passed across the shared `Schedule` boundary. Riya's runtime owns applying its timing fields and executing the services. The proof layer only observes that execution and returns `RunResult`.
 
 Copy `.env.example` values or override host ports if either port is occupied.
 
@@ -61,8 +70,11 @@ Copy `.env.example` values or override host ports if either port is occupied.
 The services emit one-line JSON events that Riya's runtime can timestamp and provide to the proof package:
 
 - `postgres/startup_delay_applied`
+- `api/db_connection_attempted`
 - `api/db_connection_succeeded`
 - `api/db_connection_failed`
+- `api/cache_connection_succeeded`
+- `api/cache_connection_failed`
 - `api/http_server_listening`
 - `worker/work_succeeded`
 - `worker/api_request_failed`

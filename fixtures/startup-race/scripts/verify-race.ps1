@@ -27,12 +27,26 @@ function Get-ContainerValue {
     return (& docker inspect --format $Template $containerId).Trim()
 }
 
+function Wait-ServiceHealthy {
+    param([string]$Service, [DateTimeOffset]$Deadline)
+
+    while ([DateTimeOffset]::UtcNow -lt $Deadline) {
+        if ((Get-ContainerValue $Service '{{.State.Health.Status}}') -eq "healthy") {
+            return
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    throw "$Service did not become healthy before the deadline"
+}
+
 Invoke-Compose build postgres api
 
 for ($run = 1; $run -le $Runs; $run++) {
     Write-Host "Intentional race run $run/$Runs"
     try {
         Invoke-Compose down -v --remove-orphans
+        Invoke-Compose up -d cache
+        Wait-ServiceHealthy cache ([DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds))
         $env:POSTGRES_START_DELAY_MS = "$PostgresDelayMs"
         Invoke-Compose up -d --no-deps postgres
         Invoke-Compose up -d --no-deps api

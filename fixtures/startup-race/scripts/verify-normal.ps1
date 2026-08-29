@@ -34,12 +34,14 @@ for ($run = 1; $run -le $Runs; $run++) {
         $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
         while ([DateTimeOffset]::UtcNow -lt $deadline) {
             $postgresHealth = Get-ContainerValue postgres '{{.State.Health.Status}}'
+            $cacheHealth = Get-ContainerValue cache '{{.State.Health.Status}}'
             $apiHealth = Get-ContainerValue api '{{.State.Health.Status}}'
             $workerState = Get-ContainerValue worker '{{.State.Status}}'
             $workerExit = Get-ContainerValue worker '{{.State.ExitCode}}'
 
             if (
                 $postgresHealth -eq "healthy" -and
+                $cacheHealth -eq "healthy" -and
                 $apiHealth -eq "healthy" -and
                 $workerState -eq "exited" -and
                 $workerExit -eq "0"
