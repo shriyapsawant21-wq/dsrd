@@ -39,6 +39,60 @@ afterEach(async () => {
 });
 
 describe("race-debugger CLI", () => {
+  it("shows the dashboard and routes interactive Search through Commander", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-"));
+    directories.push(directory);
+    const artifactPath = join(directory, "failure.json");
+    const answers = ["s", "", "race.json", "", artifactPath];
+    const output: string[] = [];
+
+    await runCli([], {
+      platform: fakePlatform,
+      log: (message) => output.push(message),
+      interactive: true,
+      useColor: false,
+      prompt: { ask: async () => answers.shift() ?? "", close: () => undefined }
+    });
+
+    expect(output.join("\n")).toContain("Discover, minimize, and replay startup race conditions.");
+    await expect(loadFailureArtifact(artifactPath)).resolves.toMatchObject({ version: 2 });
+  });
+
+  it("quits from the dashboard without platform execution", async () => {
+    const platform = new ReceiverDependentPlatform();
+    const output: string[] = [];
+
+    await runCli([], {
+      platform,
+      log: (message) => output.push(message),
+      interactive: true,
+      prompt: { ask: async () => "q", close: () => undefined }
+    });
+
+    expect(platform.runCalls).toBe(0);
+    expect(platform.replayCalls).toBe(0);
+    expect(output.join("\n")).toContain("See you next time.");
+  });
+
+  it("does not prompt for a bare non-interactive invocation", async () => {
+    let prompted = false;
+
+    await runCli([], {
+      platform: fakePlatform,
+      log: () => undefined,
+      interactive: false,
+      prompt: {
+        ask: async () => {
+          prompted = true;
+          return "s";
+        },
+        close: () => undefined
+      }
+    });
+
+    expect(prompted).toBe(false);
+  });
+
   it("searches with the injected runner and writes a replay artifact", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-"));
     directories.push(directory);
