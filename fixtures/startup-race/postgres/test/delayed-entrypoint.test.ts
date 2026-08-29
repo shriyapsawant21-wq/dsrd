@@ -3,7 +3,9 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-const bash = "C:\\Program Files\\Git\\bin\\bash.exe";
+import { resolveTestShell } from "./test-shell.js";
+
+const shell = resolveTestShell(process.platform);
 const wrapper = fileURLToPath(
   new URL("../delayed-entrypoint.sh", import.meta.url),
 );
@@ -17,7 +19,7 @@ type ScriptResult = {
 
 async function runWrapper(delay: string): Promise<ScriptResult> {
   const startedAt = performance.now();
-  const child = spawn(bash, [wrapper, "postgres"], {
+  const child = spawn(shell, [wrapper, "postgres"], {
     env: {
       ...process.env,
       POSTGRES_START_DELAY_MS: delay,
