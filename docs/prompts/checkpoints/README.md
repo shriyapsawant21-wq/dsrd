@@ -4,7 +4,7 @@ Use exactly one fresh Codex session per assigned checkpoint. Every prompt requir
 
 | Order | Prompt | Lead | Starts when | Completion handoff |
 |---|---|---|---|---|
-| 1 | [C0](C0.md) | Akil | immediately | C1, C2, C3 may begin after staging/review |
+| 1 | [C0](C0.md) | Riya | immediately | C1, C2, C3 may begin after staging/review |
 | 2 | [C1](C1.md) | Akil | C0 staged | wait for C2/C3, then C4 |
 | 2 | [C2](C2.md) | Riya | C0 staged | wait for C1/C3, then C4 |
 | 2 | [C3](C3.md) | Shriya | C0 staged | wait for C1/C2, then C4 |
