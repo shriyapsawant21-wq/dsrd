@@ -1,17 +1,22 @@
 {
   "name": "dsrd",
+  "version": "0.1.0",
   "private": true,
+  "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "fixtures/startup-race/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
     "test": "vitest run",
-    "typecheck": "npm run typecheck --workspaces"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
-    "typescript": "^5.8.3",
+    "@types/pg": "^8.15.0",
+    "typescript": "^5.9.0",
     "vitest": "^3.2.4"
   }
 }

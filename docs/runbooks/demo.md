@@ -83,3 +83,21 @@ If live demo fails unexpectedly:
 
 ## Reliability Target
 Before judging, run the full golden demo at least five consecutive times on the primary laptop and at least once on another teammate's machine.
+
+## Proof-Layer Fixture Verification
+
+Before integrating the search and runtime packages, verify Shriya's fixture independently.
+
+Normal startup must pass three consecutive times:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File fixtures/startup-race/scripts/verify-normal.ps1 -Runs 3
+```
+
+The intended early-API timing must fail three consecutive times:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File fixtures/startup-race/scripts/verify-race.ps1 -Runs 3
+```
+
+These scripts are proof-layer test helpers. The integrated `race-debugger search` and `race-debugger replay` commands must execute schedules through Riya's runtime controller rather than invoking these scripts.

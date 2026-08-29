@@ -1,2 +1,5 @@
 node_modules/
+dist/
+.npm-cache/
+*.tsbuildinfo
 packages/*/dist/

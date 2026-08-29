@@ -119,7 +119,12 @@ describe("DockerRuntimeController", () => {
       "ps",
       "stop"
     ]);
-    expect(observer.snapshot).toEqual({ scheduleId: "schedule-1", logs: [], services: [] });
+    expect(observer.snapshot).toMatchObject({
+      scheduleId: "schedule-1",
+      logs: [],
+      services: [],
+    });
+    expect(observer.snapshot?.refresh).toBeTypeOf("function");
   });
 
   it("stops the stack when a service fails to start", async () => {
@@ -145,6 +150,32 @@ describe("DockerRuntimeController", () => {
 
     await expect(controller.runSchedule(schedule)).rejects.toThrow("oracle unavailable");
     expect(compose.actions.at(-1)).toBe("stop");
+  });
+
+  it("provides a refresh callback for post-probe state and logs", async () => {
+    const compose = new RecordingCompose();
+    const observer: RunObserver = {
+      evaluate: async (snapshot) => {
+        expect(snapshot.refresh).toBeTypeOf("function");
+        await snapshot.refresh?.();
+        return passingResult;
+      },
+    };
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer,
+    });
+
+    await controller.runSchedule(schedule);
+
+    expect(compose.actions.slice(-5)).toEqual([
+      "logs",
+      "ps",
+      "logs",
+      "ps",
+      "stop",
+    ]);
   });
 
   it("preserves both the run failure and a cleanup failure", async () => {
@@ -249,6 +280,35 @@ describe("DockerRuntimeController", () => {
     await vi.advanceTimersByTimeAsync(100);
 
     await assertion;
+    expect(compose.actions.at(-1)).toBe("stop");
+    vi.useRealTimers();
+  });
+
+  it("aborts observer work before cleanup when the run times out", async () => {
+    vi.useFakeTimers();
+    const compose = new RecordingCompose();
+    let observedSignal: AbortSignal | undefined;
+    const observer: RunObserver = {
+      evaluate: (snapshot) => {
+        observedSignal = snapshot.signal;
+        return new Promise<RunResult>(() => undefined);
+      },
+    };
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer,
+      runTimeoutMs: 100,
+    });
+
+    const run = controller.runSchedule({ id: "abort-stalled", services: {} });
+    const assertion = expect(run).rejects.toThrow(
+      "Schedule abort-stalled timed out after 100ms",
+    );
+    await vi.advanceTimersByTimeAsync(100);
+
+    await assertion;
+    expect(observedSignal?.aborted).toBe(true);
     expect(compose.actions.at(-1)).toBe("stop");
     vi.useRealTimers();
   });

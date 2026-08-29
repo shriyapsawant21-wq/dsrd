@@ -1,0 +1,9 @@
+{
+  "id": "postgres-process-delay-3000",
+  "services": {
+    "cache": { "startDelayMs": 0, "readinessDelayMs": 0 },
+    "postgres": { "startDelayMs": 0, "readinessDelayMs": 3000 },
+    "api": { "startDelayMs": 0, "readinessDelayMs": 0 },
+    "worker": { "startDelayMs": 0, "readinessDelayMs": 0 }
+  }
+}
