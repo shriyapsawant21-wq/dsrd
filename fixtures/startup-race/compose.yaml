@@ -1,0 +1,64 @@
+name: dsrd-startup-race
+
+services:
+  postgres:
+    build:
+      context: ../..
+      dockerfile: fixtures/startup-race/postgres/Dockerfile
+    environment:
+      POSTGRES_DB: race_demo
+      POSTGRES_USER: race_demo
+      POSTGRES_PASSWORD: race_demo
+      POSTGRES_START_DELAY_MS: ${POSTGRES_START_DELAY_MS:-0}
+    ports:
+      - "${POSTGRES_HOST_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U race_demo -d race_demo"]
+      interval: 250ms
+      timeout: 2s
+      retries: 40
+      start_period: 1s
+    restart: "no"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: fixtures/startup-race/api/Dockerfile
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: race_demo
+      DB_USER: race_demo
+      DB_PASSWORD: race_demo
+      DB_CONNECT_TIMEOUT_MS: "2000"
+      PORT: "3000"
+    ports:
+      - "${API_HOST_PORT:-53000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 250ms
+      timeout: 2s
+      retries: 20
+      start_period: 500ms
+    restart: "no"
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: fixtures/startup-race/worker/Dockerfile
+    environment:
+      API_URL: http://api:3000/work
+      API_TIMEOUT_MS: "2000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: "no"
