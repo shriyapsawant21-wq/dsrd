@@ -2,6 +2,15 @@
 
 This file is the live source of truth. Update the relevant section immediately after every verification checkpoint.
 
+## Execution order
+
+1. C0 is a joint contract checkpoint.
+2. C1 (Akil), C2 (Riya), and C3 (Shriya) begin together after C0; they are parallel, not sequential.
+3. C4 begins only after C1-C3 are implemented and integrated.
+4. C5 follows C4; C6 follows stable C4/C5; C7 is future work after explicit admission.
+
+Every completed owner must replace their checkpoint status with `complete` and begin `Evidence` with `Implemented:` followed by the verified capability and the next checkpoint.
+
 ## C0 — Generic contract v2
 Status: in progress
 Owner: Akil, Riya, Shriya
