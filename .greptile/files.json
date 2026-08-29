@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "description": "Repository mission, ownership boundaries, engineering rules, and definition of done"
+    },
+    {
+      "path": "docs/plan.md",
+      "description": "Overall architecture and team integration plan"
+    },
+    {
+      "path": "docs/contracts/shared-contracts.md",
+      "description": "Cross-package interface contracts"
+    },
+    {
+      "path": "docs/integration.md",
+      "description": "Integration checkpoints and merge requirements"
+    }
+  ]
+}
