@@ -3,3 +3,4 @@ dist/
 .npm-cache/
 *.tsbuildinfo
 packages/*/dist/
+.worktrees/
