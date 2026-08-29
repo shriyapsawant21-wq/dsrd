@@ -15,7 +15,7 @@ import {
   probeTcpReadiness,
   type TcpProbeOptions,
 } from "./probes/tcp.js";
-import type { ReadinessObservation } from "./probes/types.js";
+import type { ReadinessObservation, Sleep } from "./probes/types.js";
 
 type HttpProbe = (options: HttpProbeOptions) => Promise<ReadinessObservation>;
 type TcpProbe = (options: TcpProbeOptions) => Promise<ReadinessObservation>;
@@ -27,9 +27,28 @@ export type RuntimeProofObserverOptions = {
   timeoutMs: number;
   pollIntervalMs: number;
   now?: () => number;
+  sleep?: Sleep;
   httpProbe?: HttpProbe;
   tcpProbe?: TcpProbe;
 };
+
+const defaultSleep: Sleep = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+function observationIsTerminal(services: ComposeServiceState[]): boolean {
+  const workerExited = services.some(
+    ({ service, state }) =>
+      service === "worker" && state.toLowerCase().includes("exit"),
+  );
+  const apiFailed = services.some(
+    ({ service, state, exitCode }) =>
+      service === "api" &&
+      (state.toLowerCase().includes("exit") ||
+        state.toLowerCase().includes("dead")) &&
+      exitCode !== 0,
+  );
+  return workerExited || apiFailed;
+}
 
 function normalizeState(
   service: ComposeServiceState,
@@ -56,11 +75,13 @@ export class RuntimeProofObserver implements RunObserver {
 
   async evaluate(snapshot: RuntimeSnapshot) {
     const now = this.options.now ?? Date.now;
+    const sleep = this.options.sleep ?? defaultSleep;
     const startedAtMs = now();
     const commonProbeOptions = {
       timeoutMs: this.options.timeoutMs,
       pollIntervalMs: this.options.pollIntervalMs,
       now,
+      sleep,
     };
     const [apiReadiness, postgresReadiness] = await Promise.all([
       (this.options.httpProbe ?? probeHttpReadiness)({
@@ -75,7 +96,18 @@ export class RuntimeProofObserver implements RunObserver {
         port: this.options.postgresPort,
       }),
     ]);
-    const evidence = (await snapshot.refresh?.()) ?? snapshot;
+    let evidence: Pick<RuntimeSnapshot, "logs" | "services"> = snapshot;
+    if (snapshot.refresh !== undefined) {
+      const refreshDeadline = now() + this.options.timeoutMs;
+      while (true) {
+        evidence = await snapshot.refresh();
+        if (observationIsTerminal(evidence.services)) break;
+
+        const remainingMs = refreshDeadline - now();
+        if (remainingMs <= 0) break;
+        await sleep(Math.min(this.options.pollIntervalMs, remainingMs));
+      }
+    }
     const observedAtMs = now();
     const parsedLogs = parseLogEvidence(
       evidence.logs,

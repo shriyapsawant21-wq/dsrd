@@ -31,7 +31,7 @@ function resolveService(
   knownServices: readonly string[],
 ): string {
   if (typeof structured?.service === "string") return structured.service;
-  return (
+  const knownService =
     [...knownServices]
       .sort((left, right) => right.length - left.length)
       .find(
@@ -39,8 +39,10 @@ function resolveService(
           container === service ||
           container.endsWith(`-${service}`) ||
           container.endsWith(`_${service}`),
-      ) ?? container
-  );
+      );
+  if (knownService !== undefined) return knownService;
+
+  return container.split(/[-_]/).filter(Boolean).at(-1) ?? container;
 }
 
 function parseStructured(body: string): StructuredFixtureLog | undefined {

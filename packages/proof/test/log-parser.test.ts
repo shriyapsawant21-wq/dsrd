@@ -85,4 +85,14 @@ describe("parseLogEvidence", () => {
 
     expect(result.failures[0]?.service).toBe("worker");
   });
+
+  it("does not leak a project prefix when no known service matches", () => {
+    const result = parseLogEvidence(
+      ["dsrd-startup-race-api-1 | connect ECONNREFUSED postgres:5432"],
+      20,
+    );
+
+    expect(result.failures[0]?.service).toBe("api");
+    expect(result.events[0]?.service).toBe("api");
+  });
 });

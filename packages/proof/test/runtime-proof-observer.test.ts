@@ -156,4 +156,54 @@ describe("RuntimeProofObserver", () => {
       event: "work_succeeded",
     });
   });
+
+  it("keeps refreshing while the worker is still running", async () => {
+    const snapshot = runtimeSnapshot();
+    snapshot.services = snapshot.services.map((service) =>
+      service.service === "worker"
+        ? { service: "worker", state: "running" }
+        : service,
+    );
+    const runningEvidence = {
+      services: snapshot.services,
+      logs: [] as string[],
+    };
+    const completedEvidence = {
+      services: runtimeSnapshot().services,
+      logs: ['worker-1 | {"service":"worker","event":"work_succeeded"}'],
+    };
+    snapshot.refresh = vi
+      .fn()
+      .mockResolvedValueOnce(runningEvidence)
+      .mockResolvedValueOnce(completedEvidence);
+    let currentTime = 1_000;
+    const observer = new RuntimeProofObserver({
+      now: () => currentTime,
+      sleep: async (milliseconds) => {
+        currentTime += milliseconds;
+      },
+      httpProbe: async () => ({
+        service: "api",
+        kind: "http",
+        status: "ready",
+        observedAtMs: 1_000,
+      }),
+      tcpProbe: async () => ({
+        service: "postgres",
+        kind: "tcp",
+        status: "ready",
+        observedAtMs: 1_000,
+      }),
+      apiUrl: "http://127.0.0.1:53000/health",
+      postgresHost: "127.0.0.1",
+      postgresPort: 55_432,
+      timeoutMs: 500,
+      pollIntervalMs: 10,
+    });
+
+    const result = await observer.evaluate(snapshot);
+
+    expect(snapshot.refresh).toHaveBeenCalledTimes(2);
+    expect(result.status).toBe("pass");
+  });
 });
