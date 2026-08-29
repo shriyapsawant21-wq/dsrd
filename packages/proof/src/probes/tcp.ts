@@ -7,7 +7,7 @@ import type {
 } from "./types.js";
 
 export type TcpProbeOptions = {
-  service: string;
+  workload: string;
   host: string;
   port: number;
   timeoutMs: number;
@@ -53,7 +53,7 @@ export async function probeTcpReadiness(
     const remainingMs = deadline - now();
     if (remainingMs <= 0) {
       return {
-        service: options.service,
+        workload: options.workload,
         kind: "tcp",
         status: "timeout",
         observedAtMs: now(),
@@ -62,7 +62,7 @@ export async function probeTcpReadiness(
 
     if (await canConnect(options.host, options.port, remainingMs)) {
       return {
-        service: options.service,
+        workload: options.workload,
         kind: "tcp",
         status: "ready",
         observedAtMs: now(),

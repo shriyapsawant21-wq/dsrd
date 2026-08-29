@@ -5,7 +5,7 @@ import type {
 } from "./types.js";
 
 export type HttpProbeOptions = {
-  service: string;
+  workload: string;
   url: string;
   timeoutMs: number;
   pollIntervalMs: number;
@@ -38,7 +38,7 @@ export async function probeHttpReadiness(
     const remainingMs = deadline - now();
     if (remainingMs <= 0) {
       return {
-        service: options.service,
+        workload: options.workload,
         kind: "http",
         status: "timeout",
         observedAtMs: now(),
@@ -60,7 +60,7 @@ export async function probeHttpReadiness(
 
       if (response.status === 200 && isHealthyBody(body)) {
         return {
-          service: options.service,
+          workload: options.workload,
           kind: "http",
           status: "ready",
           observedAtMs: now(),
@@ -68,7 +68,7 @@ export async function probeHttpReadiness(
       }
 
       return {
-        service: options.service,
+        workload: options.workload,
         kind: "http",
         status: "unhealthy",
         observedAtMs: now(),

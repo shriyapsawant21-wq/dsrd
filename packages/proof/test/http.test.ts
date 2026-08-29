@@ -50,13 +50,13 @@ describe("HTTP readiness probe", () => {
     const { url } = await listen(JSON.stringify({ status: "ok" }));
 
     const result = await probeHttpReadiness({
-      service: "api",
+      workload: "catalog-http",
       url,
       timeoutMs: 500,
       pollIntervalMs: 10,
     });
 
-    expect(result.service).toBe("api");
+    expect(result.workload).toBe("catalog-http");
     expect(result.kind).toBe("http");
     expect(result.status).toBe("ready");
     expect(result.observedAtMs).toEqual(expect.any(Number));
@@ -66,14 +66,14 @@ describe("HTTP readiness probe", () => {
     const { url } = await listen(JSON.stringify({ status: "starting" }));
 
     const result = await probeHttpReadiness({
-      service: "api",
+      workload: "catalog-http",
       url,
       timeoutMs: 500,
       pollIntervalMs: 10,
     });
 
     expect(result).toMatchObject({
-      service: "api",
+      workload: "catalog-http",
       kind: "http",
       status: "unhealthy",
       detail: "Expected HTTP 200 with { status: 'ok' }",
@@ -87,7 +87,7 @@ describe("HTTP readiness probe", () => {
     }, 40);
 
     const result = await probeHttpReadiness({
-      service: "api",
+      workload: "catalog-http",
       url: `http://127.0.0.1:${port}/health`,
       timeoutMs: 500,
       pollIntervalMs: 10,
@@ -100,14 +100,14 @@ describe("HTTP readiness probe", () => {
     const port = await unusedPort();
 
     const result = await probeHttpReadiness({
-      service: "api",
+      workload: "catalog-http",
       url: `http://127.0.0.1:${port}/health`,
       timeoutMs: 60,
       pollIntervalMs: 10,
     });
 
     expect(result).toMatchObject({
-      service: "api",
+      workload: "catalog-http",
       kind: "http",
       status: "timeout",
     });
