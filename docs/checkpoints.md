@@ -13,11 +13,11 @@ Every completed owner must replace their checkpoint status with `complete` and b
 
 ## C0 — Generic contract v2
 Status: in progress
-Owner: Akil, Riya, Shriya
+Owner: Akil (lead); Riya and Shriya (required reviewers)
 Evidence: contracts typecheck and contract test pass; full workspace typecheck fails only in v1 runtime/scheduler consumers
 Commit/PR: f8be82c feat: stage generic workload contract v2
 Remaining work: migrate C1-C3 consumers, review integrated typecheck, then merge contract v2
-Dependencies: C1, C2, and C3 branches based on f8be82c
+Dependencies: Riya and Shriya contract review; then C1, C2, and C3 branches based on f8be82c
 Blockers: staged contract must not merge before consumers migrate
 Next checkpoint: C1-C3
 
