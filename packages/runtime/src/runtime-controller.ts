@@ -38,8 +38,8 @@ export class RunTimeoutError extends Error {
 export class DockerRuntimeController {
   constructor(private readonly options: DockerRuntimeControllerOptions) {}
 
-  async runSchedule(schedule: Schedule): Promise<RunResult> {
-    this.validateSchedule(schedule);
+  async runSchedule(schedule: Schedule, serviceOrder: string[]): Promise<RunResult> {
+    this.validateSchedule(schedule, serviceOrder);
     const timeoutMs = this.options.runTimeoutMs ?? 30_000;
     validateDelayMs(timeoutMs, "runTimeoutMs");
     if (timeoutMs === 0) {
@@ -51,7 +51,7 @@ export class DockerRuntimeController {
     const observationAbort = new AbortController();
     try {
       result = await this.withTimeout(
-        this.executeSchedule(schedule, observationAbort.signal),
+        this.executeSchedule(schedule, serviceOrder, observationAbort.signal),
         schedule.id,
         timeoutMs,
         () => observationAbort.abort(),
@@ -87,22 +87,28 @@ export class DockerRuntimeController {
     return this.options.compose.resetStack();
   }
 
-  replaySchedule(schedule: Schedule): Promise<RunResult> {
-    return this.runSchedule(schedule);
+  replaySchedule(schedule: Schedule, serviceOrder: string[]): Promise<RunResult> {
+    return this.runSchedule(schedule, serviceOrder);
   }
 
   private async executeSchedule(
     schedule: Schedule,
+    serviceOrder: string[],
     signal: AbortSignal,
   ): Promise<RunResult> {
     await this.options.compose.resetStack();
-    for (const [service, serviceSchedule] of Object.entries(schedule.services)) {
-      if (serviceSchedule.readinessDelayMs !== undefined) {
-        await this.options.readinessDelay?.apply(service, serviceSchedule.readinessDelayMs);
+    for (const perturbation of schedule.perturbations) {
+      if (perturbation.phase === "ready") {
+        await this.options.readinessDelay?.apply(perturbation.workloadId, perturbation.delayMs);
       }
     }
-    for (const [service, serviceSchedule] of Object.entries(schedule.services)) {
-      const startDelayMs = serviceSchedule.startDelayMs ?? 0;
+    const startDelays = new Map(
+      schedule.perturbations
+        .filter((perturbation) => perturbation.phase === "start")
+        .map((perturbation) => [perturbation.workloadId, perturbation.delayMs])
+    );
+    for (const service of serviceOrder) {
+      const startDelayMs = startDelays.get(service) ?? 0;
       await this.options.delay.wait(startDelayMs);
       await this.options.compose.startService(service);
     }
@@ -164,20 +170,29 @@ export class DockerRuntimeController {
     }
   }
 
-  private validateSchedule(schedule: Schedule): void {
-    const hasReadinessDelay = Object.values(schedule.services).some(
-      (serviceSchedule) => serviceSchedule.readinessDelayMs !== undefined
+  private validateSchedule(schedule: Schedule, serviceOrder: string[]): void {
+    const knownServices = new Set(serviceOrder);
+    const perturbationKeys = new Set<string>();
+    const hasReadinessDelay = schedule.perturbations.some(
+      (perturbation) => perturbation.phase === "ready"
     );
     if (hasReadinessDelay && this.options.readinessDelay === undefined) {
-      throw new Error("readinessDelayMs requires a readiness delay adapter");
+      throw new Error("ready perturbations require a readiness delay adapter");
     }
 
-    for (const [service, serviceSchedule] of Object.entries(schedule.services)) {
-      validateDelayMs(serviceSchedule.startDelayMs ?? 0, `${service}.startDelayMs`);
-      if (serviceSchedule.readinessDelayMs !== undefined) {
-        validateDelayMs(serviceSchedule.readinessDelayMs, `${service}.readinessDelayMs`);
+    for (const perturbation of schedule.perturbations) {
+      if (!knownServices.has(perturbation.workloadId)) {
+        throw new Error(`Unknown Compose service: ${perturbation.workloadId}`);
       }
+      const key = `${perturbation.workloadId}:${perturbation.phase}`;
+      if (perturbationKeys.has(key)) {
+        throw new Error(`Duplicate perturbation for ${perturbation.workloadId} ${perturbation.phase}`);
+      }
+      perturbationKeys.add(key);
+      validateDelayMs(
+        perturbation.delayMs,
+        `${perturbation.workloadId}.${perturbation.phase} delayMs`
+      );
     }
   }
 }
-
