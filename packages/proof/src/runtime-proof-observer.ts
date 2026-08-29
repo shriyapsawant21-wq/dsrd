@@ -26,7 +26,11 @@ export type WorkloadProofObserverOptions = {
   pollIntervalMs?: number;
 };
 
-const incompletePassEvidence = "Run ended without complete pass evidence";
+function hasTerminalFailure(snapshot: WorkloadExecutionSnapshot): boolean {
+  return snapshot.states.some(
+    ({ state, exitCode }) => state === "exited" && exitCode !== undefined && exitCode !== 0,
+  );
+}
 
 function waitForNextRefresh(signal: AbortSignal | undefined, delayMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -61,7 +65,7 @@ export class WorkloadProofObserver implements WorkloadRunObserver {
       if (
         snapshot.refresh === undefined ||
         result.status === "pass" ||
-        result.failureReason !== incompletePassEvidence
+        hasTerminalFailure(evidence)
       ) {
         return result;
       }
