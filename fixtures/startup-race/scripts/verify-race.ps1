@@ -13,11 +13,9 @@ $ErrorActionPreference = "Stop"
 $composeFile = Join-Path $PSScriptRoot "..\compose.yaml"
 
 function Invoke-Compose {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
-
-    & docker compose -f $composeFile @Arguments
+    & docker compose -f $composeFile @args
     if ($LASTEXITCODE -ne 0) {
-        throw "docker compose failed: $($Arguments -join ' ')"
+        throw "docker compose failed: $($args -join ' ')"
     }
 }
 

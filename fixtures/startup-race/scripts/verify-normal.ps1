@@ -10,18 +10,16 @@ $ErrorActionPreference = "Stop"
 $composeFile = Join-Path $PSScriptRoot "..\compose.yaml"
 
 function Invoke-Compose {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
-
-    & docker compose -f $composeFile @Arguments
+    & docker compose -f $composeFile @args
     if ($LASTEXITCODE -ne 0) {
-        throw "docker compose failed: $($Arguments -join ' ')"
+        throw "docker compose failed: $($args -join ' ')"
     }
 }
 
 function Get-ContainerValue {
     param([string]$Service, [string]$Template)
 
-    $containerId = (& docker compose -f $composeFile ps -q $Service).Trim()
+    $containerId = (& docker compose -f $composeFile ps -q --all $Service).Trim()
     if (-not $containerId) { return "" }
     return (& docker inspect --format $Template $containerId).Trim()
 }
