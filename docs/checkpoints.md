@@ -32,12 +32,12 @@ Blockers: none
 Next checkpoint: C4
 
 ## C2 — Compose execution platform
-Status: not started
+Status: complete
 Owner: Riya
-Evidence: current runtime tests pass against v1 service schedules
-Commit/PR: none
-Remaining work: implement generic adapter discovery, translation, execution, reset, and replay
-Dependencies: staged C0 contract f8be82c
+Evidence: Implemented: Compose platform discovery, generic schedule translation, reset, run, and replay verified; moving to C4 and waiting for C1/C3.
+Commit/PR: c3af2b7
+Remaining work: none
+Dependencies: ready
 Blockers: none
 Next checkpoint: C4
 
