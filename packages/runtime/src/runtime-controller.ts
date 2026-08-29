@@ -25,6 +25,10 @@ export type DockerRuntimeControllerOptions = {
   runTimeoutMs?: number;
 };
 
+interface StartupTracker {
+  inFlight?: Promise<void>;
+}
+
 export class RunTimeoutError extends Error {
   constructor(
     readonly scheduleId: string,
@@ -49,9 +53,16 @@ export class DockerRuntimeController {
     let result: RunResult | undefined;
     let runFailure: unknown;
     const observationAbort = new AbortController();
+    const startup: StartupTracker = {};
+    const execution = this.executeSchedule(
+      schedule,
+      serviceOrder,
+      observationAbort.signal,
+      startup,
+    );
     try {
       result = await this.withTimeout(
-        this.executeSchedule(schedule, serviceOrder, observationAbort.signal),
+        execution,
         schedule.id,
         timeoutMs,
         () => observationAbort.abort(),
@@ -60,6 +71,7 @@ export class DockerRuntimeController {
       runFailure = error;
     }
     observationAbort.abort();
+    await startup.inFlight?.catch(() => undefined);
 
     try {
       await this.cleanup();
@@ -95,6 +107,7 @@ export class DockerRuntimeController {
     schedule: Schedule,
     serviceOrder: string[],
     signal: AbortSignal,
+    startup: StartupTracker,
   ): Promise<RunResult> {
     const startedAtMs = Date.now();
     await this.options.compose.resetStack();
@@ -109,12 +122,19 @@ export class DockerRuntimeController {
         .map((perturbation) => [perturbation.workloadId, perturbation.delayMs])
     );
     const independentlyScheduled = [...startDelays.values()].some((delayMs) => delayMs > 0);
+    signal.throwIfAborted();
     if (independentlyScheduled) {
-      await this.startIndependently(serviceOrder, startDelays, signal);
+      const starts = this.startIndependently(serviceOrder, startDelays, signal);
+      startup.inFlight = starts;
+      await starts;
     } else {
       for (const service of serviceOrder) {
+        signal.throwIfAborted();
         await this.options.delay.wait(0);
-        await this.options.compose.startService(service);
+        signal.throwIfAborted();
+        const start = this.options.compose.startService(service);
+        startup.inFlight = start;
+        await start;
       }
     }
 

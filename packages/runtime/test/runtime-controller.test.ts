@@ -76,6 +76,33 @@ class BlockingDelay implements Delay {
   }
 }
 
+class BlockingStartCompose extends RecordingCompose {
+  private resolveStartEntered?: () => void;
+  private resolveStart?: () => void;
+  private readonly startEntered = new Promise<void>((resolve) => {
+    this.resolveStartEntered = resolve;
+  });
+
+  override async startService(service: string): Promise<void> {
+    this.actions.push(`start:${service}`);
+    if (service === "api") {
+      this.resolveStartEntered?.();
+      await new Promise<void>((resolve) => {
+        this.resolveStart = resolve;
+      });
+      this.actions.push(`started:${service}`);
+    }
+  }
+
+  waitForStart(): Promise<void> {
+    return this.startEntered;
+  }
+
+  releaseStart(): void {
+    this.resolveStart?.();
+  }
+}
+
 class RecordingObserver implements RunObserver {
   snapshot?: ObservationSnapshot;
 
@@ -206,6 +233,33 @@ describe("DockerRuntimeController", () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(compose.actions).not.toContain("start:postgres");
     expect(compose.actions.at(-1)).toBe("stop");
+  });
+
+  it("waits for an in-flight independent start before timeout cleanup", async () => {
+    const compose = new BlockingStartCompose();
+    const delay = new BlockingDelay();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay,
+      observer: new RecordingObserver(),
+      runTimeoutMs: 10,
+    });
+    const run = controller.runSchedule({
+      id: "timed-out-during-api-start",
+      perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
+    }, ["api", "postgres"]);
+    const runFailure = run.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    await compose.waitForStart();
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    expect(compose.actions).not.toContain("stop");
+
+    compose.releaseStart();
+    await expect(runFailure).resolves.toBeInstanceOf(RunTimeoutError);
+    expect(compose.actions).toEqual(["reset", "start:api", "started:api", "stop"]);
   });
 
   it("stops the stack when a service fails to start", async () => {
