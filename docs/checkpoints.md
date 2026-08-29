@@ -35,7 +35,7 @@ Next checkpoint: C4
 Status: complete
 Owner: Riya
 Evidence: Implemented: Compose platform discovery, generic schedule translation, reset, run, and replay verified; moving to C4 and waiting for C1/C3.
-Commit/PR: pending commit
+Commit/PR: c3af2b7
 Remaining work: none
 Dependencies: ready
 Blockers: none
