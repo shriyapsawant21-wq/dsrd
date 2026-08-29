@@ -38,7 +38,9 @@ const defaultSleep: Sleep = (milliseconds) =>
 function observationIsTerminal(services: ComposeServiceState[]): boolean {
   const workerExited = services.some(
     ({ service, state }) =>
-      service === "worker" && state.toLowerCase().includes("exit"),
+      service === "worker" &&
+      (state.toLowerCase().includes("exit") ||
+        state.toLowerCase().includes("dead")),
   );
   const apiFailed = services.some(
     ({ service, state, exitCode }) =>
@@ -99,9 +101,11 @@ export class RuntimeProofObserver implements RunObserver {
     let evidence: Pick<RuntimeSnapshot, "logs" | "services"> = snapshot;
     if (snapshot.refresh !== undefined) {
       while (true) {
+        snapshot.signal?.throwIfAborted();
         evidence = await snapshot.refresh();
         if (observationIsTerminal(evidence.services)) break;
         await sleep(this.options.pollIntervalMs);
+        snapshot.signal?.throwIfAborted();
       }
     }
     const observedAtMs = now();

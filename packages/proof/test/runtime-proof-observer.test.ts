@@ -256,4 +256,80 @@ describe("RuntimeProofObserver", () => {
     expect(snapshot.refresh).toHaveBeenCalledTimes(3);
     expect(result.status).toBe("pass");
   });
+
+  it("stops refreshing when runtime observation is aborted", async () => {
+    const controller = new AbortController();
+    const snapshot = runtimeSnapshot();
+    snapshot.services = snapshot.services.map((service) =>
+      service.service === "worker"
+        ? { service: "worker", state: "running" }
+        : service,
+    );
+    snapshot.signal = controller.signal;
+    snapshot.refresh = vi.fn(async () => ({
+      services: snapshot.services,
+      logs: [],
+    }));
+    const observer = new RuntimeProofObserver({
+      sleep: async () => controller.abort(),
+      httpProbe: async () => ({
+        service: "api",
+        kind: "http",
+        status: "ready",
+        observedAtMs: 1_000,
+      }),
+      tcpProbe: async () => ({
+        service: "postgres",
+        kind: "tcp",
+        status: "ready",
+        observedAtMs: 1_000,
+      }),
+      apiUrl: "http://127.0.0.1:53000/health",
+      postgresHost: "127.0.0.1",
+      postgresPort: 55_432,
+      timeoutMs: 50,
+      pollIntervalMs: 10,
+    });
+
+    await expect(observer.evaluate(snapshot)).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(snapshot.refresh).toHaveBeenCalledOnce();
+  });
+
+  it("treats a dead worker as terminal evidence", async () => {
+    const snapshot = runtimeSnapshot();
+    snapshot.refresh = vi.fn(async () => ({
+      services: snapshot.services.map((service) =>
+        service.service === "worker"
+          ? { service: "worker", state: "dead", exitCode: 1 }
+          : service,
+      ),
+      logs: ["worker-1 | startup failed"],
+    }));
+    const observer = new RuntimeProofObserver({
+      httpProbe: async () => ({
+        service: "api",
+        kind: "http",
+        status: "ready",
+        observedAtMs: 1_000,
+      }),
+      tcpProbe: async () => ({
+        service: "postgres",
+        kind: "tcp",
+        status: "ready",
+        observedAtMs: 1_000,
+      }),
+      apiUrl: "http://127.0.0.1:53000/health",
+      postgresHost: "127.0.0.1",
+      postgresPort: 55_432,
+      timeoutMs: 50,
+      pollIntervalMs: 10,
+    });
+
+    const result = await observer.evaluate(snapshot);
+
+    expect(snapshot.refresh).toHaveBeenCalledOnce();
+    expect(result.status).toBe("fail");
+  });
 });

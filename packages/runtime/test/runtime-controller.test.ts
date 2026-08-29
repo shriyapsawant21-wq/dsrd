@@ -283,5 +283,34 @@ describe("DockerRuntimeController", () => {
     expect(compose.actions.at(-1)).toBe("stop");
     vi.useRealTimers();
   });
+
+  it("aborts observer work before cleanup when the run times out", async () => {
+    vi.useFakeTimers();
+    const compose = new RecordingCompose();
+    let observedSignal: AbortSignal | undefined;
+    const observer: RunObserver = {
+      evaluate: (snapshot) => {
+        observedSignal = snapshot.signal;
+        return new Promise<RunResult>(() => undefined);
+      },
+    };
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer,
+      runTimeoutMs: 100,
+    });
+
+    const run = controller.runSchedule({ id: "abort-stalled", services: {} });
+    const assertion = expect(run).rejects.toThrow(
+      "Schedule abort-stalled timed out after 100ms",
+    );
+    await vi.advanceTimersByTimeAsync(100);
+
+    await assertion;
+    expect(observedSignal?.aborted).toBe(true);
+    expect(compose.actions.at(-1)).toBe("stop");
+    vi.useRealTimers();
+  });
 });
 

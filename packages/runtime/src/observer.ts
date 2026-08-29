@@ -11,6 +11,7 @@ export type ObservationSnapshot = {
   scheduleId: string;
   logs: string[];
   services: ComposeServiceState[];
+  signal?: AbortSignal;
   refresh?: () => Promise<{
     logs: string[];
     services: ComposeServiceState[];

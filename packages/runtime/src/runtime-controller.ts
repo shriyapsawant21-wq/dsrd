@@ -48,11 +48,18 @@ export class DockerRuntimeController {
 
     let result: RunResult | undefined;
     let runFailure: unknown;
+    const observationAbort = new AbortController();
     try {
-      result = await this.withTimeout(this.executeSchedule(schedule), schedule.id, timeoutMs);
+      result = await this.withTimeout(
+        this.executeSchedule(schedule, observationAbort.signal),
+        schedule.id,
+        timeoutMs,
+        () => observationAbort.abort(),
+      );
     } catch (error) {
       runFailure = error;
     }
+    observationAbort.abort();
 
     try {
       await this.cleanup();
@@ -84,7 +91,10 @@ export class DockerRuntimeController {
     return this.runSchedule(schedule);
   }
 
-  private async executeSchedule(schedule: Schedule): Promise<RunResult> {
+  private async executeSchedule(
+    schedule: Schedule,
+    signal: AbortSignal,
+  ): Promise<RunResult> {
     await this.options.compose.resetStack();
     for (const [service, serviceSchedule] of Object.entries(schedule.services)) {
       if (serviceSchedule.readinessDelayMs !== undefined) {
@@ -101,6 +111,7 @@ export class DockerRuntimeController {
       scheduleId: schedule.id,
       logs: await this.options.compose.collectLogs(),
       services: await this.options.compose.listServices(),
+      signal,
       refresh: async () => ({
         logs: await this.options.compose.collectLogs(),
         services: await this.options.compose.listServices()
@@ -109,10 +120,18 @@ export class DockerRuntimeController {
     return this.options.observer.evaluate(snapshot);
   }
 
-  private async withTimeout<T>(operation: Promise<T>, scheduleId: string, timeoutMs: number): Promise<T> {
+  private async withTimeout<T>(
+    operation: Promise<T>,
+    scheduleId: string,
+    timeoutMs: number,
+    onTimeout: () => void,
+  ): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new RunTimeoutError(scheduleId, timeoutMs)), timeoutMs);
+      timer = setTimeout(() => {
+        onTimeout();
+        reject(new RunTimeoutError(scheduleId, timeoutMs));
+      }, timeoutMs);
     });
 
     try {
