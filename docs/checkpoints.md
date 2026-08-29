@@ -42,12 +42,12 @@ Blockers: none
 Next checkpoint: C4
 
 ## C3 — Workload proof evidence
-Status: not started
+Status: complete
 Owner: Shriya
-Evidence: current proof tests pass for container observations
-Commit/PR: none
-Remaining work: accept normalized workload observations and preserve deterministic oracle decisions
-Dependencies: staged C0 contract f8be82c
+Evidence: Implemented: workload-normalized proof and timeline evidence verified with deterministic oracle behavior preserved using `npm test -- packages/proof` (22 passed) and `npm run typecheck --workspace @dsrd/proof`; moving to C4 and waiting for C1/C2.
+Commit/PR: `feat/workload-proof` checkpoint commit
+Remaining work: none
+Dependencies: C1 generic scheduler is complete; waiting on C2 Compose execution platform
 Blockers: none
 Next checkpoint: C4
 

@@ -1,4 +1,4 @@
-import type { TimelineEvent } from "@dsrd/contracts";
+import type { WorkloadEvent } from "../oracle/types.js";
 
 import type {
   LogFailureCategory,
@@ -7,6 +7,7 @@ import type {
 } from "./types.js";
 
 type StructuredFixtureLog = {
+  workload?: unknown;
   service?: unknown;
   event?: unknown;
   message?: unknown;
@@ -30,6 +31,7 @@ function resolveService(
   structured: StructuredFixtureLog | undefined,
   knownServices: readonly string[],
 ): string {
+  if (typeof structured?.workload === "string") return structured.workload;
   if (typeof structured?.service === "string") return structured.service;
   const knownService =
     [...knownServices]
@@ -60,7 +62,7 @@ function parseStructured(body: string): StructuredFixtureLog | undefined {
 function classify(text: string): LogFailureCategory | undefined {
   if (/econnrefused|connection refused/i.test(text)) return "connection_refused";
   if (/etimedout|timed out|timeout/i.test(text)) return "timeout";
-  if (/dependency(?: is)? not ready|startup failed/i.test(text)) {
+  if (/dependency(?:[ _]is)?[ _]not[ _]ready|startup[ _]failed/i.test(text)) {
     return "dependency_not_ready";
   }
   return undefined;
@@ -80,13 +82,13 @@ export function parseLogEvidence(
   observedAtMs: number,
   knownServices: readonly string[] = [],
 ): ParsedLogEvidence {
-  const events: TimelineEvent[] = [];
+  const events: WorkloadEvent[] = [];
   const failures: LogFailureEvidence[] = [];
 
   for (const [lineIndex, raw] of lines.entries()) {
     const { container, body } = splitComposeLine(raw);
     const structured = parseStructured(body);
-    const service = resolveService(container, structured, knownServices);
+    const workload = resolveService(container, structured, knownServices);
     const event =
       typeof structured?.event === "string" ? structured.event : undefined;
     const detail =
@@ -98,7 +100,7 @@ export function parseLogEvidence(
     const category = classify(`${event ?? ""} ${detail ?? body}`);
     if (category !== undefined) {
       failures.push({
-        service,
+        workload,
         category,
         summary: summary(category, event),
         raw,
@@ -110,7 +112,7 @@ export function parseLogEvidence(
           typeof structured?.timeMs === "number"
             ? Math.max(0, structured.timeMs)
             : Math.max(0, observedAtMs + lineIndex),
-        service,
+        workload,
         event: event ?? `log_${category}`,
         ...(detail === undefined ? {} : { detail }),
       });

@@ -1,6 +1,6 @@
 export type ReadinessObservation = {
-  service: string;
-  kind: "http" | "tcp";
+  workload: string;
+  kind: "http" | "tcp" | "process" | "custom";
   status: "ready" | "timeout" | "unhealthy";
   observedAtMs: number;
   detail?: string;
