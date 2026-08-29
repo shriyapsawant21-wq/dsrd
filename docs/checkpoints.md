@@ -5,41 +5,41 @@ This file is the live source of truth. Update the relevant section immediately a
 ## C0 — Generic contract v2
 Status: in progress
 Owner: Akil, Riya, Shriya
-Evidence: existing contract v1 passes current typecheck; v2 review pending
-Commit/PR: none
-Remaining work: approve generic workload, target, schedule, adapter, and artifact v2 shapes
-Dependencies: three-owner review and merge
-Blockers: public contract migration not approved
+Evidence: contracts typecheck and contract test pass; full workspace typecheck fails only in v1 runtime/scheduler consumers
+Commit/PR: f8be82c feat: stage generic workload contract v2
+Remaining work: migrate C1-C3 consumers, review integrated typecheck, then merge contract v2
+Dependencies: C1, C2, and C3 branches based on f8be82c
+Blockers: staged contract must not merge before consumers migrate
 Next checkpoint: C1-C3
 
 ## C1 — Generic scheduler
-Status: blocked
+Status: not started
 Owner: Akil
 Evidence: current scheduler tests pass against v1 fake runner
 Commit/PR: none
 Remaining work: migrate candidates, minimizer, artifacts, replay, and CLI to workload perturbations
-Dependencies: C0 merged
-Blockers: Schedule v2 unavailable
+Dependencies: staged C0 contract f8be82c
+Blockers: none
 Next checkpoint: C4
 
 ## C2 — Compose execution platform
-Status: blocked
+Status: not started
 Owner: Riya
 Evidence: current runtime tests pass against v1 service schedules
 Commit/PR: none
 Remaining work: implement generic adapter discovery, translation, execution, reset, and replay
-Dependencies: C0 merged
-Blockers: ExecutionPlatform v2 unavailable
+Dependencies: staged C0 contract f8be82c
+Blockers: none
 Next checkpoint: C4
 
 ## C3 — Workload proof evidence
-Status: blocked
+Status: not started
 Owner: Shriya
 Evidence: current proof tests pass for container observations
 Commit/PR: none
 Remaining work: accept normalized workload observations and preserve deterministic oracle decisions
-Dependencies: C0 merged
-Blockers: workload observation contract unavailable
+Dependencies: staged C0 contract f8be82c
+Blockers: none
 Next checkpoint: C4
 
 ## C4 — Compose discovery
@@ -81,4 +81,3 @@ Remaining work: admit only after repeatable C4/C5 and a disposable cluster are a
 Dependencies: stable C4 and C5
 Blockers: Kubernetes is outside MVP delivery
 Next checkpoint: none
-
