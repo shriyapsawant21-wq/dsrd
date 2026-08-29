@@ -12,14 +12,66 @@ export type WorkloadExecutionSnapshot = Omit<
   "workloadEvents" | "logFailures"
 > & {
   workloadEvents?: WorkloadEvent[];
+  signal?: AbortSignal;
+  refresh?: () => Promise<
+    Pick<WorkloadExecutionSnapshot, "states" | "readiness" | "logs">
+  >;
 };
 
 export interface WorkloadRunObserver {
   evaluate(snapshot: WorkloadExecutionSnapshot): Promise<RunResult>;
 }
 
+export type WorkloadProofObserverOptions = {
+  pollIntervalMs?: number;
+};
+
+const incompletePassEvidence = "Run ended without complete pass evidence";
+
+function waitForNextRefresh(signal: AbortSignal | undefined, delayMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export class WorkloadProofObserver implements WorkloadRunObserver {
+  constructor(private readonly options: WorkloadProofObserverOptions = {}) {}
+
   async evaluate(snapshot: WorkloadExecutionSnapshot): Promise<RunResult> {
+    let evidence = snapshot;
+    let refreshed = false;
+    while (true) {
+      snapshot.signal?.throwIfAborted();
+      const result = this.classify(evidence);
+      if (
+        snapshot.refresh === undefined ||
+        result.status === "pass" ||
+        result.failureReason !== incompletePassEvidence
+      ) {
+        return result;
+      }
+
+      if (refreshed) {
+        await waitForNextRefresh(snapshot.signal, this.options.pollIntervalMs ?? 100);
+      }
+      evidence = {
+        ...evidence,
+        ...(await snapshot.refresh()),
+      };
+      refreshed = true;
+      snapshot.signal?.throwIfAborted();
+    }
+  }
+
+  private classify(snapshot: WorkloadExecutionSnapshot): RunResult {
     const parsedLogs = parseLogEvidence(
       snapshot.logs,
       Math.max(0, Date.now() - snapshot.startedAtMs),

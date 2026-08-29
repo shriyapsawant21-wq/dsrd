@@ -184,4 +184,49 @@ describe("C3 workload proof evidence", () => {
       }),
     );
   });
+
+  it("refreshes stale evidence until an initializer completes successfully", async () => {
+    const snapshot = passingSnapshot();
+    snapshot.states = snapshot.states.map((state) =>
+      state.workload === "sqlite-migrate" ? { ...state, state: "running" } : state,
+    );
+    const completedSnapshot = passingSnapshot();
+    const refresh = async () => ({
+      states: completedSnapshot.states,
+      readiness: completedSnapshot.readiness,
+      logs: completedSnapshot.logs,
+    });
+    const observer = new WorkloadProofObserver();
+
+    const result = await observer.evaluate({ ...snapshot, refresh });
+
+    expect(result.status).toBe("pass");
+  });
+
+  it("stops refreshing when runtime observation is cancelled", async () => {
+    const controller = new AbortController();
+    const snapshot = passingSnapshot();
+    snapshot.states = snapshot.states.map((state) =>
+      state.workload === "sqlite-migrate" ? { ...state, state: "running" } : state,
+    );
+    let refreshes = 0;
+    const observer = new WorkloadProofObserver();
+
+    await expect(
+      observer.evaluate({
+        ...snapshot,
+        signal: controller.signal,
+        refresh: async () => {
+          refreshes += 1;
+          controller.abort();
+          return {
+            states: snapshot.states,
+            readiness: snapshot.readiness,
+            logs: snapshot.logs,
+          };
+        },
+      }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(refreshes).toBe(1);
+  });
 });

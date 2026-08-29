@@ -26,6 +26,7 @@ export type {
 } from "./logs/types.js";
 export {
   WorkloadProofObserver,
+  type WorkloadProofObserverOptions,
   type WorkloadExecutionSnapshot,
   type WorkloadRunObserver,
 } from "./runtime-proof-observer.js";
