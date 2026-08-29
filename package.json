@@ -1,0 +1,20 @@
+{
+  "name": "distributed-startup-race-debugger",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "fixtures/startup-race/*"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p packages/contracts/tsconfig.json --noEmit",
+    "build": "tsc -b packages/contracts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
