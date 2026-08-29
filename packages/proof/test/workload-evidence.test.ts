@@ -229,4 +229,35 @@ describe("C3 workload proof evidence", () => {
     ).rejects.toMatchObject({ name: "AbortError" });
     expect(refreshes).toBe(1);
   });
+
+  it("does not refresh after cancellation races with the polling wait", async () => {
+    const controller = new AbortController();
+    const snapshot = passingSnapshot();
+    snapshot.states = snapshot.states.map((state) =>
+      state.workload === "sqlite-migrate" ? { ...state, state: "running" } : state,
+    );
+    let refreshes = 0;
+    let refreshReads = 0;
+    const refresh = async () => {
+      refreshes += 1;
+      return {
+        states: snapshot.states,
+        readiness: snapshot.readiness,
+        logs: snapshot.logs,
+      };
+    };
+    Object.defineProperty(snapshot, "refresh", {
+      get: () => {
+        refreshReads += 1;
+        if (refreshReads === 3) controller.abort();
+        return refresh;
+      },
+    });
+    Object.defineProperty(snapshot, "signal", { value: controller.signal });
+
+    await expect(
+      new WorkloadProofObserver({ pollIntervalMs: 0 }).evaluate(snapshot),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(refreshes).toBe(1);
+  });
 });

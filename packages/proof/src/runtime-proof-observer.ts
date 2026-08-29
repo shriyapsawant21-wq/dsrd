@@ -30,15 +30,22 @@ const incompletePassEvidence = "Run ended without complete pass evidence";
 
 function waitForNextRefresh(signal: AbortSignal | undefined, delayMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, delayMs);
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const onAbort = () => {
-      clearTimeout(timer);
+      if (timer !== undefined) clearTimeout(timer);
       reject(signal?.reason);
     };
     signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) {
+      signal.removeEventListener("abort", onAbort);
+      reject(signal.reason);
+      return;
+    }
+
+    timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
   });
 }
 
