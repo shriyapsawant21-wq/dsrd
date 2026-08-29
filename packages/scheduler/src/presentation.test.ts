@@ -15,6 +15,10 @@ describe("CLI presentation", () => {
     expect(output).not.toContain("\u001B[");
   });
 
+  it("renders the DSRD banner in hot pink when color is enabled", () => {
+    expect(renderDashboard(true)).toContain("\u001B[38;2;255;105;180m");
+  });
+
   it("renders a replayable failure summary", () => {
     expect(
       renderResultSummary({

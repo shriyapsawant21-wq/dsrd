@@ -14,7 +14,7 @@ const banner = [
 ].join("\n");
 
 export function renderDashboard(useColor: boolean): string {
-  const title = useColor ? `\u001B[96m${banner}\u001B[0m` : banner;
+  const title = useColor ? `\u001B[38;2;255;105;180m${banner}\u001B[0m` : banner;
 
   return [
     title,
