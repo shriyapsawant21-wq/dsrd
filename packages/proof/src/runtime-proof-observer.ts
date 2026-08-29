@@ -46,6 +46,7 @@ function normalizeState(
     service: service.service,
     state: normalizedState,
     ...(service.exitCode === undefined ? {} : { exitCode: service.exitCode }),
+    ...(service.health === undefined ? {} : { health: service.health }),
     observedAtMs,
   };
 }

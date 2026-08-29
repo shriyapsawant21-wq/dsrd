@@ -11,7 +11,7 @@ cache ------^
 
 - `postgres` runs the official PostgreSQL image through `postgres/delayed-entrypoint.sh`. `POSTGRES_START_DELAY_MS` defaults to `0`; a controlled experiment may set it to a non-negative millisecond delay.
 - `cache` runs Redis and supplies a second real backend dependency without adding UI work or another intentional race.
-- `api` performs one PostgreSQL `SELECT 1` and one Redis `PING` startup check. It starts Express only after both succeed. It intentionally does not retry, so an early start while PostgreSQL is unavailable emits `db_connection_failed` and exits non-zero.
+- `api` performs one PostgreSQL `SELECT 1` and one Redis `PING` startup check. PostgreSQL is required: its failure exits the API. Redis is a scalable cache and degrades safely: its failure emits `cache_connection_failed`, but does not stop the API. This keeps PostgreSQL as the fixture's only intentional startup race.
 - `worker` makes one request to `GET /work`. It emits `work_succeeded` and exits zero only for HTTP 200 plus `{ "status": "processed" }`.
 
 ## Why normal startup passes
@@ -62,6 +62,8 @@ The non-zero API exit is the primary machine-verifiable failure signal. The stru
 ## Replay schedule
 
 `schedules/postgres-startup-race.json` is the four-service example schedule passed across the shared `Schedule` boundary. Riya's runtime owns applying its timing fields and executing the services. The proof layer only observes that execution and returns `RunResult`.
+
+For this schedule to expose the race, the runtime must start scheduled services without allowing Compose to auto-start health-gated dependencies. The current `DockerComposeClient.startService` does not yet provide that mode. The runtime must also supply a terminal state/log snapshot after the worker finishes; its current pre-observation snapshot can be stale while proof probes are running. Both changes belong to Riya's runtime boundary and are intentionally not implemented here.
 
 Copy `.env.example` values or override host ports if either port is occupied.
 

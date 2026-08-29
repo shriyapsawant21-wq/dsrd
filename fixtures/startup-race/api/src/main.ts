@@ -34,7 +34,10 @@ async function connectOnce(): Promise<void> {
 async function connectCacheOnce(): Promise<void> {
   const client = createClient({
     url: `redis://${process.env.CACHE_HOST ?? "cache"}:${process.env.CACHE_PORT ?? "6379"}`,
-    socket: { connectTimeout: connectionTimeoutMillis },
+    socket: {
+      connectTimeout: connectionTimeoutMillis,
+      reconnectStrategy: false,
+    },
   });
   try {
     await client.connect();

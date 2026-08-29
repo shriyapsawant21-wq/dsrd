@@ -7,6 +7,7 @@ export type ContainerObservation = {
   service: string;
   state: "running" | "exited" | "missing";
   exitCode?: number;
+  health?: string;
   observedAtMs: number;
 };
 

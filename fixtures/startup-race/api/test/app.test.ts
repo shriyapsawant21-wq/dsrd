@@ -78,22 +78,21 @@ describe("startup-race API", () => {
     ]);
   });
 
-  it("fails startup after one cache attempt without retrying", async () => {
+  it("degrades safely after one cache attempt without creating another startup race", async () => {
     let attempts = 0;
     const events: Array<{ service: string; event: string; detail?: string }> = [];
 
-    await expect(
-      initializeApi(
-        async () => undefined,
-        async () => {
-          attempts += 1;
-          throw new Error("connect ECONNREFUSED cache:6379");
-        },
-        (event) => events.push(event),
-      ),
-    ).rejects.toThrow("connect ECONNREFUSED cache:6379");
+    const app = await initializeApi(
+      async () => undefined,
+      async () => {
+        attempts += 1;
+        throw new Error("connect ECONNREFUSED cache:6379");
+      },
+      (event) => events.push(event),
+    );
 
     expect(attempts).toBe(1);
+    expect(app).toBeTypeOf("function");
     expect(events).toEqual([
       { service: "api", event: "db_connection_attempted" },
       { service: "api", event: "db_connection_succeeded" },

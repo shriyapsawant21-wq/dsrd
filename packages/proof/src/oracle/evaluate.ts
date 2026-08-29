@@ -33,6 +33,12 @@ export function evaluateRun(input: ObservationSnapshot): RunResult {
     (container) =>
       container.service === "api" && container.state === "running",
   );
+  const cacheRunning = input.containers.some(
+    (container) =>
+      container.service === "cache" &&
+      container.state === "running" &&
+      container.health === "healthy",
+  );
   const workerExitedZero = input.containers.some(
     (container) =>
       container.service === "worker" &&
@@ -44,6 +50,7 @@ export function evaluateRun(input: ObservationSnapshot): RunResult {
     apiHttp?.status === "ready" &&
     postgresTcp?.status === "ready" &&
     apiRunning &&
+    cacheRunning &&
     workerExitedZero
   ) {
     return {

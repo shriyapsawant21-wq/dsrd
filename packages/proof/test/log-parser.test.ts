@@ -45,4 +45,21 @@ describe("parseLogEvidence", () => {
       failures: [],
     });
   });
+
+  it("preserves observed order for fixture events without timestamps", () => {
+    const result = parseLogEvidence(
+      [
+        'api-1 | {"event":"db_connection_attempted"}',
+        'api-1 | {"event":"db_connection_succeeded"}',
+        'api-1 | {"event":"cache_connection_succeeded"}',
+      ],
+      100,
+    );
+
+    expect(result.events.map(({ timeMs, event }) => [timeMs, event])).toEqual([
+      [100, "db_connection_attempted"],
+      [101, "db_connection_succeeded"],
+      [102, "cache_connection_succeeded"],
+    ]);
+  });
 });

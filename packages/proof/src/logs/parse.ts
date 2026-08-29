@@ -59,7 +59,7 @@ export function parseLogEvidence(
   const events: TimelineEvent[] = [];
   const failures: LogFailureEvidence[] = [];
 
-  for (const raw of lines) {
+  for (const [lineIndex, raw] of lines.entries()) {
     const { service, body } = splitComposeLine(raw);
     const structured = parseStructured(body);
     const event =
@@ -84,7 +84,7 @@ export function parseLogEvidence(
         timeMs:
           typeof structured?.timeMs === "number"
             ? Math.max(0, structured.timeMs)
-            : Math.max(0, observedAtMs),
+            : Math.max(0, observedAtMs + lineIndex),
         service,
         event: event ?? `log_${category}`,
         ...(detail === undefined ? {} : { detail }),

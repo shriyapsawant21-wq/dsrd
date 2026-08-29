@@ -9,6 +9,12 @@ function passingSnapshot(): ObservationSnapshot {
     startedAtMs: 1_000,
     containers: [
       { service: "postgres", state: "running", observedAtMs: 1_010 },
+      {
+        service: "cache",
+        state: "running",
+        health: "healthy",
+        observedAtMs: 1_015,
+      },
       { service: "api", state: "running", observedAtMs: 1_020 },
       {
         service: "worker",
@@ -134,6 +140,29 @@ describe("deterministic failure oracle", () => {
       status: "fail",
       failureReason: "Run ended without complete pass evidence",
     });
+  });
+
+  it("does not pass a four-service run when Redis is missing", () => {
+    const snapshot = passingSnapshot();
+    snapshot.containers = snapshot.containers.filter(
+      (container) => container.service !== "cache",
+    );
+
+    expect(evaluateRun(snapshot)).toMatchObject({
+      status: "fail",
+      failureReason: "Run ended without complete pass evidence",
+    });
+  });
+
+  it("does not pass while Redis is unhealthy", () => {
+    const snapshot = passingSnapshot();
+    snapshot.containers = snapshot.containers.map((container) =>
+      container.service === "cache"
+        ? { ...container, health: "unhealthy" }
+        : container,
+    );
+
+    expect(evaluateRun(snapshot).status).toBe("fail");
   });
 
   it("uses deterministic parsed evidence to explain an incomplete run", () => {

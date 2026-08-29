@@ -44,7 +44,6 @@ export async function initializeApi(
       event: "cache_connection_failed",
       detail: errorDetail(error),
     });
-    throw error;
   }
 
   const app = express();
