@@ -262,6 +262,35 @@ describe("DockerRuntimeController", () => {
     expect(compose.actions).toEqual(["reset", "start:api", "started:api", "stop"]);
   });
 
+  it("does not observe after a timed-out start settles", async () => {
+    const compose = new BlockingStartCompose();
+    const observer = new RecordingObserver();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer,
+      runTimeoutMs: 10,
+    });
+    const run = controller.runSchedule({
+      id: "timed-out-before-observation",
+      perturbations: [],
+    }, ["api"]);
+    const runFailure = run.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    await compose.waitForStart();
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    compose.releaseStart();
+    await expect(runFailure).resolves.toBeInstanceOf(RunTimeoutError);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(compose.actions).not.toContain("logs");
+    expect(compose.actions).not.toContain("ps");
+    expect(observer.snapshot).toBeUndefined();
+  });
+
   it("stops the stack when a service fails to start", async () => {
     const compose = new RecordingCompose();
     compose.failStartFor = "api";

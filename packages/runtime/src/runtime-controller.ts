@@ -138,6 +138,8 @@ export class DockerRuntimeController {
       }
     }
 
+    signal.throwIfAborted();
+
     const snapshot: ObservationSnapshot = {
       scheduleId: schedule.id,
       startedAtMs,
