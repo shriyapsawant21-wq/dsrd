@@ -230,6 +230,30 @@ describe("C3 workload proof evidence", () => {
     expect(refreshes).toBe(1);
   });
 
+  it("refreshes a transient non-zero exit before classifying the run", async () => {
+    const snapshot = passingSnapshot();
+    snapshot.states = snapshot.states.map((state) =>
+      state.workload === "sqlite-migrate" ? { ...state, exitCode: 1 } : state,
+    );
+    const completedSnapshot = passingSnapshot();
+    let refreshes = 0;
+
+    const result = await new WorkloadProofObserver({ pollIntervalMs: 0 }).evaluate({
+      ...snapshot,
+      refresh: async () => {
+        refreshes += 1;
+        return {
+          states: completedSnapshot.states,
+          readiness: completedSnapshot.readiness,
+          logs: completedSnapshot.logs,
+        };
+      },
+    });
+
+    expect(result.status).toBe("pass");
+    expect(refreshes).toBe(1);
+  });
+
   it("stops refreshing when runtime observation is cancelled", async () => {
     const controller = new AbortController();
     const snapshot = passingSnapshot();

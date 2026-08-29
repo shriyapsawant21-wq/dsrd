@@ -65,7 +65,7 @@ export class WorkloadProofObserver implements WorkloadRunObserver {
       if (
         snapshot.refresh === undefined ||
         result.status === "pass" ||
-        hasTerminalFailure(evidence)
+        (refreshed && hasTerminalFailure(evidence))
       ) {
         return result;
       }
