@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { loadFailureArtifact } from "./artifact.js";
 import { runCli } from "./cli.js";
-import { fakeRunSchedule } from "./fake-runtime.js";
+import { fakePlatform } from "./fake-platform.js";
 
 const directories: string[] = [];
 
@@ -22,13 +22,13 @@ describe("race-debugger CLI", () => {
     const output: string[] = [];
 
     await runCli(
-      ["search", "--service", "postgres", "--output", artifactPath],
-      { runSchedule: fakeRunSchedule, log: (message) => output.push(message) }
+      ["search", "--platform", "local-process", "--target", "race.json", "--output", artifactPath],
+      { platform: fakePlatform, log: (message) => output.push(message) }
     );
 
     await expect(loadFailureArtifact(artifactPath)).resolves.toMatchObject({
       minimizedSchedule: {
-        services: { postgres: { readinessDelayMs: 1000 } }
+        perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }]
       }
     });
     expect(output.join("\n")).toContain("Failure found");
@@ -40,12 +40,12 @@ describe("race-debugger CLI", () => {
     const artifactPath = join(directory, "failure.json");
     await runCli(
       ["search", "--output", artifactPath],
-      { runSchedule: fakeRunSchedule, log: () => undefined }
+      { platform: fakePlatform, log: () => undefined }
     );
     const output: string[] = [];
 
     await runCli(["replay", artifactPath], {
-      runSchedule: fakeRunSchedule,
+      platform: fakePlatform,
       log: (message) => output.push(message)
     });
 

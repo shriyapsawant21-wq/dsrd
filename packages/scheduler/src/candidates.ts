@@ -1,24 +1,21 @@
-import type { Schedule, ServiceSchedule } from "@dsrd/contracts";
-
-export type ScheduleDimension = {
-  service: string;
-  field: keyof ServiceSchedule;
-};
-
-export type CandidateOptions = {
-  delayOptionsMs: readonly number[];
-  dimensions: readonly ScheduleDimension[];
-};
+import type { Schedule, Workload } from "@dsrd/contracts";
 
 /** Generates a stable, bounded Cartesian grid of startup perturbations. */
-export function generateCandidates(options: CandidateOptions): Schedule[] {
-  const valueCombinations = cartesianProduct(
-    options.dimensions.map(() => options.delayOptionsMs)
+export function generateCandidates(
+  workloads: readonly Workload[],
+  delayOptionsMs: readonly number[]
+): Schedule[] {
+  const dimensions = workloads.flatMap((workload) =>
+    workload.perturbablePhases.map((phase) => ({ workloadId: workload.id, phase }))
   );
+  const valueCombinations = cartesianProduct(dimensions.map(() => delayOptionsMs));
 
   return valueCombinations.map((values, index) => ({
     id: `schedule-${index.toString().padStart(3, "0")}`,
-    services: toServices(options.dimensions, values)
+    perturbations: dimensions.flatMap((dimension, dimensionIndex) => {
+      const delayMs = values[dimensionIndex];
+      return delayMs === 0 ? [] : [{ ...dimension, delayMs }];
+    })
   }));
 }
 
@@ -30,24 +27,4 @@ function cartesianProduct<T>(sets: readonly (readonly T[])[]): T[][] {
       ),
     [[]]
   );
-}
-
-function toServices(
-  dimensions: readonly ScheduleDimension[],
-  values: readonly number[]
-): Schedule["services"] {
-  return dimensions.reduce<Schedule["services"]>((services, dimension, index) => {
-    const value = values[index];
-    if (value === 0) {
-      return services;
-    }
-
-    return {
-      ...services,
-      [dimension.service]: {
-        ...services[dimension.service],
-        [dimension.field]: value
-      }
-    };
-  }, {});
 }

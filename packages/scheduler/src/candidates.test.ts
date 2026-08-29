@@ -1,33 +1,32 @@
 import { describe, expect, it } from "vitest";
+import type { Workload } from "@dsrd/contracts";
 
 import { generateCandidates } from "./candidates.js";
 
 describe("generateCandidates", () => {
-  it("creates a deterministic bounded grid with a baseline schedule", () => {
-    const schedules = generateCandidates({
-      delayOptionsMs: [0, 500],
-      dimensions: [
-        { service: "postgres", field: "readinessDelayMs" },
-        { service: "api", field: "startDelayMs" }
-      ]
-    });
+  it("creates a deterministic bounded workload-phase grid with a baseline", () => {
+    const workloads: Workload[] = [
+      { id: "migration", kind: "initializer", perturbablePhases: ["ready"] },
+      { id: "api", kind: "service", perturbablePhases: ["start"] }
+    ];
+    const schedules = generateCandidates(workloads, [0, 500]);
 
     expect(schedules).toEqual([
-      { id: "schedule-000", services: {} },
+      { id: "schedule-000", perturbations: [] },
       {
         id: "schedule-001",
-        services: { api: { startDelayMs: 500 } }
+        perturbations: [{ workloadId: "api", phase: "start", delayMs: 500 }]
       },
       {
         id: "schedule-002",
-        services: { postgres: { readinessDelayMs: 500 } }
+        perturbations: [{ workloadId: "migration", phase: "ready", delayMs: 500 }]
       },
       {
         id: "schedule-003",
-        services: {
-          api: { startDelayMs: 500 },
-          postgres: { readinessDelayMs: 500 }
-        }
+        perturbations: [
+          { workloadId: "migration", phase: "ready", delayMs: 500 },
+          { workloadId: "api", phase: "start", delayMs: 500 }
+        ]
       }
     ]);
   });

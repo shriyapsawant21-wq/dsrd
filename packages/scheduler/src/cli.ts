@@ -2,21 +2,21 @@ import { Command } from "commander";
 
 import { loadFailureArtifact, saveFailureArtifact } from "./artifact.js";
 import { generateCandidates } from "./candidates.js";
-import { fakeRunSchedule } from "./fake-runtime.js";
+import { fakePlatform } from "./fake-platform.js";
 import { discoverFailure, replayFailure } from "./orchestrator.js";
-import type { RunSchedule } from "./search.js";
+import type { ExecutionPlatform, TargetConfig } from "@dsrd/contracts";
 
 const defaultDelayOptionsMs = [0, 500, 1000, 1500, 2000, 3000];
 
 export type CliDependencies = {
-  runSchedule: RunSchedule;
+  platform: ExecutionPlatform;
   log: (message: string) => void;
 };
 
 export async function runCli(
   args: readonly string[],
   dependencies: CliDependencies = {
-    runSchedule: fakeRunSchedule,
+    platform: fakePlatform,
     log: console.log
   }
 ): Promise<void> {
@@ -26,21 +26,22 @@ export async function runCli(
   program
     .command("search")
     .description("search for a failing startup schedule")
-    .option("-s, --service <service>", "service to perturb", "postgres")
+    .option("-p, --platform <platform>", "target platform", "local-process")
+    .option("-t, --target <path>", "target manifest or compose file", "race.json")
     .option("-d, --delay-options <milliseconds>", "comma-separated delay values")
     .option("-o, --output <path>", "artifact output path", "failure.json")
-    .action(async (options: { service: string; delayOptions?: string; output: string }) => {
+    .action(async (options: { platform: string; target: string; delayOptions?: string; output: string }) => {
       const delayOptionsMs = options.delayOptions
         ? parseDelayOptions(options.delayOptions)
         : defaultDelayOptionsMs;
-      const candidates = generateCandidates({
-        delayOptionsMs,
-        dimensions: [{ service: options.service, field: "readinessDelayMs" }]
-      });
+      const target = targetConfig(options.platform, options.target);
+      const workloads = await dependencies.platform.discover(target);
+      const candidates = generateCandidates(workloads, delayOptionsMs);
       const result = await discoverFailure({
         candidates,
         delayOptionsMs,
-        runSchedule: dependencies.runSchedule
+        target,
+        runSchedule: dependencies.platform.run
       });
 
       if (result.status === "no_failure") {
@@ -58,7 +59,7 @@ export async function runCli(
     .description("replay a saved failure artifact")
     .action(async (artifactPath: string) => {
       const artifact = await loadFailureArtifact(artifactPath);
-      const result = await replayFailure(artifact, dependencies.runSchedule);
+      const result = await replayFailure(artifact, dependencies.platform.replay);
       dependencies.log(
         result.status === "reproduced"
           ? "Replay reproduced expected failure."
@@ -67,6 +68,19 @@ export async function runCli(
     });
 
   await program.parseAsync(["node", "race-debugger", ...args]);
+}
+
+function targetConfig(platform: string, targetPath: string): TargetConfig {
+  switch (platform) {
+    case "compose":
+      return { platform, composeFile: targetPath };
+    case "local-process":
+      return { platform, manifestPath: targetPath };
+    case "kubernetes":
+      return { platform, manifestPath: targetPath };
+    default:
+      throw new Error(`Unsupported target platform: ${platform}`);
+  }
 }
 
 function parseDelayOptions(input: string): number[] {

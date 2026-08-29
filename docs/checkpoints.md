@@ -22,12 +22,12 @@ Blockers: none
 Next checkpoint: C1-C3
 
 ## C1 — Generic scheduler
-Status: not started
+Status: complete
 Owner: Akil
-Evidence: current scheduler tests pass against v1 fake runner
-Commit/PR: none
-Remaining work: migrate candidates, minimizer, artifacts, replay, and CLI to workload perturbations
-Dependencies: staged C0 contract f8be82c
+Evidence: Implemented: generic scheduler, fake platform, v2 artifact, and injected replay verified; moving to C4 and waiting for C2/C3.
+Commit/PR: feat/generic-scheduler
+Remaining work: none
+Dependencies: ready
 Blockers: none
 Next checkpoint: C4
 

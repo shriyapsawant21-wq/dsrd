@@ -1,6 +1,6 @@
-import type { RunResult, Schedule, TimelineEvent } from "@dsrd/contracts";
+import type { RunResult, Schedule, TargetConfig, TimelineEvent } from "@dsrd/contracts";
 
-export type RunSchedule = (schedule: Schedule) => Promise<RunResult>;
+export type RunSchedule = (target: TargetConfig, schedule: Schedule) => Promise<RunResult>;
 
 export type SearchResult =
   | {
@@ -18,10 +18,11 @@ export type SearchResult =
 /** Runs schedules in order and trusts the proof layer's pass/fail result. */
 export async function searchSchedules(
   schedules: readonly Schedule[],
+  target: TargetConfig,
   runSchedule: RunSchedule
 ): Promise<SearchResult> {
   for (const [index, schedule] of schedules.entries()) {
-    const result = await runSchedule(schedule);
+    const result = await runSchedule(target, schedule);
     if (result.status === "fail") {
       return {
         status: "found_failure",
