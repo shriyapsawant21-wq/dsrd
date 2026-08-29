@@ -7,25 +7,28 @@ describe("minimizeSchedule", () => {
   it("removes unnecessary perturbations and lowers necessary delays", async () => {
     const original: Schedule = {
       id: "schedule-003",
-      services: {
-        postgres: { readinessDelayMs: 1000 },
-        api: { startDelayMs: 500 }
-      }
+      perturbations: [
+        { workloadId: "bootstrap", phase: "ready", delayMs: 1000 },
+        { workloadId: "api", phase: "start", delayMs: 500 }
+      ]
     };
 
     const minimized = await minimizeSchedule(
       original,
-      async (schedule) =>
+      { platform: "local-process", manifestPath: "race.json" },
+      async (_target, schedule) =>
         resultFor(
           schedule,
-          (schedule.services.postgres?.readinessDelayMs ?? 0) >= 500
+          (schedule.perturbations.find(
+            ({ workloadId, phase }) => workloadId === "bootstrap" && phase === "ready"
+          )?.delayMs ?? 0) >= 500
         ),
       [0, 250, 500, 1000]
     );
 
     expect(minimized).toEqual({
       id: "schedule-003-minimized",
-      services: { postgres: { readinessDelayMs: 500 } }
+      perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 500 }]
     });
   });
 });

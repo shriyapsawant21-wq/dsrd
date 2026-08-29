@@ -3,19 +3,31 @@ import { readFile, writeFile } from "node:fs/promises";
 import type { FailureArtifact } from "@dsrd/contracts";
 import { z } from "zod";
 
-const serviceScheduleSchema = z.object({
-  startDelayMs: z.number().nonnegative().optional(),
-  readinessDelayMs: z.number().nonnegative().optional()
-});
-
 const scheduleSchema = z.object({
   id: z.string().min(1),
-  services: z.record(z.string(), serviceScheduleSchema)
+  perturbations: z.array(
+    z.object({
+      workloadId: z.string().min(1),
+      phase: z.enum(["start", "ready"]),
+      delayMs: z.number().nonnegative()
+    })
+  )
 });
 
+const targetSchema = z.discriminatedUnion("platform", [
+  z.object({ platform: z.literal("compose"), composeFile: z.string().min(1) }),
+  z.object({ platform: z.literal("local-process"), manifestPath: z.string().min(1) }),
+  z.object({
+    platform: z.literal("kubernetes"),
+    manifestPath: z.string().min(1),
+    namespace: z.string().min(1).optional()
+  })
+]);
+
 export const failureArtifactSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   createdAt: z.string().datetime(),
+  target: targetSchema,
   originalSchedule: scheduleSchema,
   minimizedSchedule: scheduleSchema,
   expectedFailureReason: z.string().optional(),
@@ -34,7 +46,7 @@ export type CreateFailureArtifactInput = Omit<FailureArtifact, "version">;
 export function createFailureArtifact(
   input: CreateFailureArtifactInput
 ): FailureArtifact {
-  return failureArtifactSchema.parse({ version: 1, ...input });
+  return failureArtifactSchema.parse({ version: 2, ...input });
 }
 
 export async function saveFailureArtifact(

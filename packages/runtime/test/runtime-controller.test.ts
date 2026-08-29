@@ -90,11 +90,10 @@ class RecordingReadinessDelay implements ReadinessDelayAdapter {
 
 const schedule: Schedule = {
   id: "schedule-1",
-  services: {
-    postgres: { startDelayMs: 100 },
-    api: { startDelayMs: 0 },
-    worker: { startDelayMs: 25 }
-  }
+  perturbations: [
+    { workloadId: "postgres", phase: "start", delayMs: 100 },
+    { workloadId: "worker", phase: "start", delayMs: 25 }
+  ]
 };
 
 describe("DockerRuntimeController", () => {
@@ -104,7 +103,7 @@ describe("DockerRuntimeController", () => {
     const observer = new RecordingObserver();
     const controller = new DockerRuntimeController({ compose, delay, observer });
 
-    const result = await controller.runSchedule(schedule);
+    const result = await controller.runSchedule(schedule, ["postgres", "api", "worker"]);
 
     expect(result).toEqual(passingResult);
     expect(compose.actions).toEqual([
@@ -136,7 +135,7 @@ describe("DockerRuntimeController", () => {
       observer: new RecordingObserver()
     });
 
-    await expect(controller.runSchedule(schedule)).rejects.toThrow("cannot start api");
+    await expect(controller.runSchedule(schedule, ["postgres", "api", "worker"])).rejects.toThrow("cannot start api");
     expect(compose.actions.at(-1)).toBe("stop");
   });
 
@@ -148,7 +147,7 @@ describe("DockerRuntimeController", () => {
       observer: new RecordingObserver(passingResult, new Error("oracle unavailable"))
     });
 
-    await expect(controller.runSchedule(schedule)).rejects.toThrow("oracle unavailable");
+    await expect(controller.runSchedule(schedule, ["postgres", "api", "worker"])).rejects.toThrow("oracle unavailable");
     expect(compose.actions.at(-1)).toBe("stop");
   });
 
@@ -167,7 +166,7 @@ describe("DockerRuntimeController", () => {
       observer,
     });
 
-    await controller.runSchedule(schedule);
+    await controller.runSchedule(schedule, ["postgres", "api", "worker"]);
 
     expect(compose.actions.slice(-5)).toEqual([
       "logs",
@@ -188,7 +187,7 @@ describe("DockerRuntimeController", () => {
       observer: new RecordingObserver()
     });
 
-    const failure = await controller.runSchedule(schedule).catch((error: unknown) => error);
+    const failure = await controller.runSchedule(schedule, ["postgres", "api", "worker"]).catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(AggregateError);
     expect((failure as AggregateError).errors).toEqual([
@@ -208,9 +207,9 @@ describe("DockerRuntimeController", () => {
     await expect(
       controller.runSchedule({
         id: "invalid",
-        services: { api: { startDelayMs: -1 } }
-      })
-    ).rejects.toThrow("api.startDelayMs must be a non-negative finite integer");
+        perturbations: [{ workloadId: "api", phase: "start", delayMs: -1 }]
+      }, ["api"])
+    ).rejects.toThrow("api.start delayMs must be a non-negative finite integer");
     expect(compose.actions).toEqual([]);
   });
 
@@ -225,9 +224,9 @@ describe("DockerRuntimeController", () => {
     await expect(
       controller.runSchedule({
         id: "unsupported",
-        services: { postgres: { readinessDelayMs: 1500 } }
-      })
-    ).rejects.toThrow("readinessDelayMs requires a readiness delay adapter");
+        perturbations: [{ workloadId: "postgres", phase: "ready", delayMs: 1500 }]
+      }, ["postgres"])
+    ).rejects.toThrow("ready perturbations require a readiness delay adapter");
     expect(compose.actions).toEqual([]);
   });
 
@@ -242,11 +241,8 @@ describe("DockerRuntimeController", () => {
 
     await controller.runSchedule({
       id: "readiness",
-      services: {
-        postgres: { readinessDelayMs: 1500 },
-        api: { startDelayMs: 0 }
-      }
-    });
+      perturbations: [{ workloadId: "postgres", phase: "ready", delayMs: 1500 }]
+    }, ["postgres", "api"]);
 
     expect(compose.actions).toEqual([
       "reset",
@@ -275,7 +271,7 @@ describe("DockerRuntimeController", () => {
       runTimeoutMs: 100
     });
 
-    const run = controller.runSchedule({ id: "stalled", services: {} });
+    const run = controller.runSchedule({ id: "stalled", perturbations: [] }, []);
     const assertion = expect(run).rejects.toThrow("Schedule stalled timed out after 100ms");
     await vi.advanceTimersByTimeAsync(100);
 
@@ -301,7 +297,7 @@ describe("DockerRuntimeController", () => {
       runTimeoutMs: 100,
     });
 
-    const run = controller.runSchedule({ id: "abort-stalled", services: {} });
+    const run = controller.runSchedule({ id: "abort-stalled", perturbations: [] }, []);
     const assertion = expect(run).rejects.toThrow(
       "Schedule abort-stalled timed out after 100ms",
     );
@@ -313,4 +309,3 @@ describe("DockerRuntimeController", () => {
     vi.useRealTimers();
   });
 });
-

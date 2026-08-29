@@ -20,15 +20,16 @@ describe("failure artifacts", () => {
   it("persists and validates the shared failure artifact shape", async () => {
     const artifact = createFailureArtifact({
       createdAt: "2026-08-29T00:00:00.000Z",
+      target: { platform: "local-process", manifestPath: "race.json" },
       originalSchedule: {
         id: "schedule-003",
-        services: { postgres: { readinessDelayMs: 1000 } }
+        perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }]
       },
       minimizedSchedule: {
         id: "schedule-003-minimized",
-        services: { postgres: { readinessDelayMs: 500 } }
+        perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 500 }]
       },
-      expectedFailureReason: "database unavailable",
+      expectedFailureReason: "bootstrap unavailable",
       events: [{ timeMs: 500, service: "api", event: "startup_failed" }]
     });
     const directory = await mkdtemp(join(tmpdir(), "dsrd-artifact-"));

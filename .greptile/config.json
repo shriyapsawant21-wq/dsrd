@@ -1,0 +1,9 @@
+{
+  "strictness": 2,
+  "commentTypes": ["logic", "syntax"],
+  "skipReview": "AUTOMATIC",
+  "statusCheck": true,
+  "statusCommentsEnabled": true,
+  "fixWithAI": true,
+  "instructions": "Review deterministic behavior, shared-contract compatibility, ownership boundaries, replay reliability, and tests. Do not suggest schedule-search logic outside the scheduler package, Docker lifecycle policy outside the runtime package, or LLM-based pass/fail classification. Treat AGENTS.md and the referenced architecture documents as authoritative."
+}

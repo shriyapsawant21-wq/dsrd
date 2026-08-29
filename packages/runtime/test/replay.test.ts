@@ -35,8 +35,8 @@ describe("runtime replay", () => {
 
     const result = await controller.replaySchedule({
       id: "saved-failure",
-      services: { postgres: {}, api: {} }
-    });
+      perturbations: []
+    }, ["postgres", "api"]);
 
     expect(starts).toEqual(["postgres", "api"]);
     expect(result).toEqual({
@@ -48,4 +48,3 @@ describe("runtime replay", () => {
     });
   });
 });
-

@@ -2,12 +2,36 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ExecutionPlatform, RunResult, Schedule, TargetConfig, Workload } from "@dsrd/contracts";
 
 import { loadFailureArtifact } from "./artifact.js";
 import { runCli } from "./cli.js";
-import { fakeRunSchedule } from "./fake-runtime.js";
+import { fakePlatform } from "./fake-platform.js";
 
 const directories: string[] = [];
+
+class ReceiverDependentPlatform implements ExecutionPlatform {
+  runCalls = 0;
+  replayCalls = 0;
+
+  discover(_target: TargetConfig): Promise<Workload[]> {
+    return fakePlatform.discover(_target);
+  }
+
+  reset(_target: TargetConfig): Promise<void> {
+    return fakePlatform.reset(_target);
+  }
+
+  async run(target: TargetConfig, schedule: Schedule): Promise<RunResult> {
+    this.runCalls += 1;
+    return fakePlatform.run(target, schedule);
+  }
+
+  async replay(target: TargetConfig, schedule: Schedule): Promise<RunResult> {
+    this.replayCalls += 1;
+    return fakePlatform.replay(target, schedule);
+  }
+}
 
 afterEach(async () => {
   await Promise.all(directories.map((directory) => rm(directory, { recursive: true })));
@@ -22,13 +46,13 @@ describe("race-debugger CLI", () => {
     const output: string[] = [];
 
     await runCli(
-      ["search", "--service", "postgres", "--output", artifactPath],
-      { runSchedule: fakeRunSchedule, log: (message) => output.push(message) }
+      ["search", "--platform", "local-process", "--target", "race.json", "--output", artifactPath],
+      { platform: fakePlatform, log: (message) => output.push(message) }
     );
 
     await expect(loadFailureArtifact(artifactPath)).resolves.toMatchObject({
       minimizedSchedule: {
-        services: { postgres: { readinessDelayMs: 1000 } }
+        perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }]
       }
     });
     expect(output.join("\n")).toContain("Failure found");
@@ -40,15 +64,34 @@ describe("race-debugger CLI", () => {
     const artifactPath = join(directory, "failure.json");
     await runCli(
       ["search", "--output", artifactPath],
-      { runSchedule: fakeRunSchedule, log: () => undefined }
+      { platform: fakePlatform, log: () => undefined }
     );
     const output: string[] = [];
 
     await runCli(["replay", artifactPath], {
-      runSchedule: fakeRunSchedule,
+      platform: fakePlatform,
       log: (message) => output.push(message)
     });
 
     expect(output.join("\n")).toContain("Replay reproduced expected failure");
+  });
+
+  it("keeps the execution platform receiver for search and replay", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-"));
+    directories.push(directory);
+    const artifactPath = join(directory, "failure.json");
+    const platform = new ReceiverDependentPlatform();
+
+    await runCli(["search", "--output", artifactPath], {
+      platform,
+      log: () => undefined,
+    });
+    await runCli(["replay", artifactPath], {
+      platform,
+      log: () => undefined,
+    });
+
+    expect(platform.runCalls).toBeGreaterThan(0);
+    expect(platform.replayCalls).toBe(1);
   });
 });

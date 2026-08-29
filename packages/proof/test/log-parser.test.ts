@@ -11,7 +11,7 @@ describe("parseLogEvidence", () => {
 
     expect(result.failures).toEqual([
       {
-        service: "api",
+        workload: "api",
         category: "connection_refused",
         summary: "PostgreSQL connection was refused",
         raw: 'api-1 | {"event":"db_connection_failed","message":"connect ECONNREFUSED postgres:5432","timeMs":42}',
@@ -20,7 +20,7 @@ describe("parseLogEvidence", () => {
     expect(result.events).toEqual([
       {
         timeMs: 42,
-        service: "api",
+        workload: "api",
         event: "db_connection_failed",
         detail: "connect ECONNREFUSED postgres:5432",
       },
@@ -72,8 +72,8 @@ describe("parseLogEvidence", () => {
       ["postgres", "cache", "api", "worker"],
     );
 
-    expect(result.failures[0]?.service).toBe("api");
-    expect(result.events[0]?.service).toBe("api");
+    expect(result.failures[0]?.workload).toBe("api");
+    expect(result.events[0]?.workload).toBe("api");
   });
 
   it("resolves raw project-prefixed lines against known service names", () => {
@@ -83,7 +83,7 @@ describe("parseLogEvidence", () => {
       ["api", "worker"],
     );
 
-    expect(result.failures[0]?.service).toBe("worker");
+    expect(result.failures[0]?.workload).toBe("worker");
   });
 
   it("does not leak a project prefix when no known service matches", () => {
@@ -92,7 +92,7 @@ describe("parseLogEvidence", () => {
       20,
     );
 
-    expect(result.failures[0]?.service).toBe("api");
-    expect(result.events[0]?.service).toBe("api");
+    expect(result.failures[0]?.workload).toBe("api");
+    expect(result.events[0]?.workload).toBe("api");
   });
 });

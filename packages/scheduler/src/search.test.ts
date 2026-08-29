@@ -4,15 +4,18 @@ import { describe, expect, it } from "vitest";
 import { searchSchedules } from "./search.js";
 
 const schedules: Schedule[] = [
-  { id: "schedule-000", services: {} },
-  { id: "schedule-001", services: { postgres: { readinessDelayMs: 500 } } },
-  { id: "schedule-002", services: { postgres: { readinessDelayMs: 1000 } } }
+  { id: "schedule-000", perturbations: [] },
+  { id: "schedule-001", perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 500 }] },
+  { id: "schedule-002", perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }] }
 ];
+
+const target = { platform: "local-process" as const, manifestPath: "race.json" };
 
 describe("searchSchedules", () => {
   it("stops at the first failure classified by the supplied runner", async () => {
     const executed: string[] = [];
-    const result = await searchSchedules(schedules, async (schedule) => {
+    const result = await searchSchedules(schedules, target, async (runTarget, schedule) => {
+      expect(runTarget).toEqual(target);
       executed.push(schedule.id);
       return runResult(schedule.id, schedule.id === "schedule-001" ? "fail" : "pass");
     });
@@ -22,12 +25,12 @@ describe("searchSchedules", () => {
       status: "found_failure",
       testedSchedules: 2,
       failingSchedule: schedules[1],
-      failureReason: "database unavailable"
+      failureReason: "bootstrap unavailable"
     });
   });
 
   it("reports no failure after exhausting candidates", async () => {
-    const result = await searchSchedules(schedules, async (schedule) =>
+    const result = await searchSchedules(schedules, target, async (_target, schedule) =>
       runResult(schedule.id, "pass")
     );
 
@@ -41,6 +44,6 @@ function runResult(scheduleId: string, status: RunResult["status"]): RunResult {
     status,
     events: [],
     logs: [],
-    ...(status === "fail" ? { failureReason: "database unavailable" } : {})
+    ...(status === "fail" ? { failureReason: "bootstrap unavailable" } : {})
   };
 }

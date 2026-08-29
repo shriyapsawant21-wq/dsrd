@@ -44,14 +44,14 @@ describe("TCP readiness probe", () => {
     const { port } = await listen();
 
     const result = await probeTcpReadiness({
-      service: "postgres",
+      workload: "catalog-db",
       host: "127.0.0.1",
       port,
       timeoutMs: 500,
       pollIntervalMs: 10,
     });
 
-    expect(result.service).toBe("postgres");
+    expect(result.workload).toBe("catalog-db");
     expect(result.kind).toBe("tcp");
     expect(result.status).toBe("ready");
     expect(result.observedAtMs).toEqual(expect.any(Number));
@@ -64,7 +64,7 @@ describe("TCP readiness probe", () => {
     }, 40);
 
     const result = await probeTcpReadiness({
-      service: "postgres",
+      workload: "catalog-db",
       host: "127.0.0.1",
       port,
       timeoutMs: 500,
@@ -78,7 +78,7 @@ describe("TCP readiness probe", () => {
     const port = await unusedPort();
 
     const result = await probeTcpReadiness({
-      service: "postgres",
+      workload: "catalog-db",
       host: "127.0.0.1",
       port,
       timeoutMs: 60,
@@ -86,7 +86,7 @@ describe("TCP readiness probe", () => {
     });
 
     expect(result).toMatchObject({
-      service: "postgres",
+      workload: "catalog-db",
       kind: "tcp",
       status: "timeout",
     });

@@ -1,4 +1,4 @@
-import type { TimelineEvent } from "@dsrd/contracts";
+import type { WorkloadEvent } from "../oracle/types.js";
 
 export type LogFailureCategory =
   | "connection_refused"
@@ -6,13 +6,13 @@ export type LogFailureCategory =
   | "dependency_not_ready";
 
 export type LogFailureEvidence = {
-  service: string;
+  workload: string;
   category: LogFailureCategory;
   summary: string;
   raw: string;
 };
 
 export type ParsedLogEvidence = {
-  events: TimelineEvent[];
+  events: WorkloadEvent[];
   failures: LogFailureEvidence[];
 };

@@ -1,130 +1,97 @@
-import type {
-  ComposeServiceState,
-  ObservationSnapshot as RuntimeSnapshot,
-  RunObserver,
-} from "@dsrd/runtime";
+import type { RunResult } from "@dsrd/contracts";
 
 import { parseLogEvidence } from "./logs/parse.js";
-import { evaluateRun } from "./oracle/evaluate.js";
-import type { ContainerObservation } from "./oracle/types.js";
-import {
-  probeHttpReadiness,
-  type HttpProbeOptions,
-} from "./probes/http.js";
-import {
-  probeTcpReadiness,
-  type TcpProbeOptions,
-} from "./probes/tcp.js";
-import type { ReadinessObservation, Sleep } from "./probes/types.js";
+import { evaluateWorkloadRun } from "./oracle/evaluate.js";
+import type {
+  WorkloadEvent,
+  WorkloadObservationSnapshot,
+} from "./oracle/types.js";
 
-type HttpProbe = (options: HttpProbeOptions) => Promise<ReadinessObservation>;
-type TcpProbe = (options: TcpProbeOptions) => Promise<ReadinessObservation>;
-
-export type RuntimeProofObserverOptions = {
-  apiUrl: string;
-  postgresHost: string;
-  postgresPort: number;
-  timeoutMs: number;
-  pollIntervalMs: number;
-  now?: () => number;
-  sleep?: Sleep;
-  httpProbe?: HttpProbe;
-  tcpProbe?: TcpProbe;
+export type WorkloadExecutionSnapshot = Omit<
+  WorkloadObservationSnapshot,
+  "workloadEvents" | "logFailures"
+> & {
+  workloadEvents?: WorkloadEvent[];
+  signal?: AbortSignal;
+  refresh?: () => Promise<
+    Pick<WorkloadExecutionSnapshot, "states" | "readiness" | "logs">
+  >;
 };
 
-const defaultSleep: Sleep = (milliseconds) =>
-  new Promise((resolve) => setTimeout(resolve, milliseconds));
-
-function observationIsTerminal(services: ComposeServiceState[]): boolean {
-  const workerExited = services.some(
-    ({ service, state }) =>
-      service === "worker" &&
-      (state.toLowerCase().includes("exit") ||
-        state.toLowerCase().includes("dead")),
-  );
-  const apiFailed = services.some(
-    ({ service, state, exitCode }) =>
-      service === "api" &&
-      (state.toLowerCase().includes("exit") ||
-        state.toLowerCase().includes("dead")) &&
-      exitCode !== 0,
-  );
-  return workerExited || apiFailed;
+export interface WorkloadRunObserver {
+  evaluate(snapshot: WorkloadExecutionSnapshot): Promise<RunResult>;
 }
 
-function normalizeState(
-  service: ComposeServiceState,
-  observedAtMs: number,
-): ContainerObservation {
-  const state = service.state.toLowerCase();
-  const normalizedState = state.includes("running")
-    ? "running"
-    : state.includes("exit") || state.includes("dead")
-      ? "exited"
-      : "missing";
+export type WorkloadProofObserverOptions = {
+  pollIntervalMs?: number;
+};
 
-  return {
-    service: service.service,
-    state: normalizedState,
-    ...(service.exitCode === undefined ? {} : { exitCode: service.exitCode }),
-    ...(service.health === undefined ? {} : { health: service.health }),
-    observedAtMs,
-  };
+function hasTerminalFailure(snapshot: WorkloadExecutionSnapshot): boolean {
+  return snapshot.states.some(
+    ({ state, exitCode }) => state === "exited" && exitCode !== undefined && exitCode !== 0,
+  );
 }
 
-export class RuntimeProofObserver implements RunObserver {
-  constructor(private readonly options: RuntimeProofObserverOptions) {}
-
-  async evaluate(snapshot: RuntimeSnapshot) {
-    const now = this.options.now ?? Date.now;
-    const sleep = this.options.sleep ?? defaultSleep;
-    const startedAtMs = now();
-    const commonProbeOptions = {
-      timeoutMs: this.options.timeoutMs,
-      pollIntervalMs: this.options.pollIntervalMs,
-      now,
-      sleep,
+function waitForNextRefresh(signal: AbortSignal | undefined, delayMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onAbort = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      reject(signal?.reason);
     };
-    const [apiReadiness, postgresReadiness] = await Promise.all([
-      (this.options.httpProbe ?? probeHttpReadiness)({
-        ...commonProbeOptions,
-        service: "api",
-        url: this.options.apiUrl,
-      }),
-      (this.options.tcpProbe ?? probeTcpReadiness)({
-        ...commonProbeOptions,
-        service: "postgres",
-        host: this.options.postgresHost,
-        port: this.options.postgresPort,
-      }),
-    ]);
-    let evidence: Pick<RuntimeSnapshot, "logs" | "services"> = snapshot;
-    if (snapshot.refresh !== undefined) {
-      while (true) {
-        snapshot.signal?.throwIfAborted();
-        evidence = await snapshot.refresh();
-        if (observationIsTerminal(evidence.services)) break;
-        await sleep(this.options.pollIntervalMs);
-        snapshot.signal?.throwIfAborted();
-      }
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) {
+      signal.removeEventListener("abort", onAbort);
+      reject(signal.reason);
+      return;
     }
-    const observedAtMs = now();
-    const parsedLogs = parseLogEvidence(
-      evidence.logs,
-      observedAtMs - startedAtMs,
-      evidence.services.map(({ service }) => service),
-    );
 
-    return evaluateRun({
-      scheduleId: snapshot.scheduleId,
-      startedAtMs,
-      containers: evidence.services.map((service) =>
-        normalizeState(service, observedAtMs),
-      ),
-      readiness: [apiReadiness, postgresReadiness],
-      fixtureEvents: parsedLogs.events,
+    timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+  });
+}
+
+export class WorkloadProofObserver implements WorkloadRunObserver {
+  constructor(private readonly options: WorkloadProofObserverOptions = {}) {}
+
+  async evaluate(snapshot: WorkloadExecutionSnapshot): Promise<RunResult> {
+    let evidence = snapshot;
+    let refreshed = false;
+    while (true) {
+      snapshot.signal?.throwIfAborted();
+      const result = this.classify(evidence);
+      if (
+        snapshot.refresh === undefined ||
+        result.status === "pass" ||
+        (refreshed && hasTerminalFailure(evidence))
+      ) {
+        return result;
+      }
+
+      if (refreshed) {
+        await waitForNextRefresh(snapshot.signal, this.options.pollIntervalMs ?? 100);
+      }
+      evidence = {
+        ...evidence,
+        ...(await snapshot.refresh()),
+      };
+      refreshed = true;
+      snapshot.signal?.throwIfAborted();
+    }
+  }
+
+  private classify(snapshot: WorkloadExecutionSnapshot): RunResult {
+    const parsedLogs = parseLogEvidence(
+      snapshot.logs,
+      Math.max(0, Date.now() - snapshot.startedAtMs),
+      snapshot.workloads.map(({ id }) => id),
+    );
+    return evaluateWorkloadRun({
+      ...snapshot,
+      workloadEvents: [...(snapshot.workloadEvents ?? []), ...parsedLogs.events],
       logFailures: parsedLogs.failures,
-      logs: evidence.logs,
     });
   }
 }
