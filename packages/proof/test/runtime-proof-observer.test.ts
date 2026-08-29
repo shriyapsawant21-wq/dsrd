@@ -103,4 +103,57 @@ describe("RuntimeProofObserver", () => {
       detail: "connect ECONNREFUSED postgres:5432",
     });
   });
+
+  it("refreshes services and logs after probes before classification", async () => {
+    const snapshot = runtimeSnapshot();
+    snapshot.services = snapshot.services.map((service) =>
+      service.service === "worker"
+        ? { service: "worker", state: "running" }
+        : service,
+    );
+    snapshot.logs = [];
+    snapshot.refresh = vi.fn(async () => ({
+      services: runtimeSnapshot().services,
+      logs: [
+        'dsrd-startup-race-worker-1 | {"service":"worker","event":"work_succeeded"}',
+      ],
+    }));
+    const times = [1_000, 1_500];
+    const observer = new RuntimeProofObserver({
+      now: () => times.shift() ?? 1_500,
+      httpProbe: async () => ({
+        service: "api",
+        kind: "http",
+        status: "ready",
+        observedAtMs: 1_400,
+      }),
+      tcpProbe: async () => ({
+        service: "postgres",
+        kind: "tcp",
+        status: "ready",
+        observedAtMs: 1_300,
+      }),
+      apiUrl: "http://127.0.0.1:53000/health",
+      postgresHost: "127.0.0.1",
+      postgresPort: 55_432,
+      timeoutMs: 500,
+      pollIntervalMs: 10,
+    });
+
+    const result = await observer.evaluate(snapshot);
+
+    expect(snapshot.refresh).toHaveBeenCalledOnce();
+    expect(result.status).toBe("pass");
+    expect(result.events).toContainEqual({
+      timeMs: 500,
+      service: "worker",
+      event: "container_exited",
+      detail: "exit code 0",
+    });
+    expect(result.events).toContainEqual({
+      timeMs: 500,
+      service: "worker",
+      event: "work_succeeded",
+    });
+  });
 });

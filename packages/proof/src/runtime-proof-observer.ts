@@ -75,22 +75,24 @@ export class RuntimeProofObserver implements RunObserver {
         port: this.options.postgresPort,
       }),
     ]);
+    const evidence = (await snapshot.refresh?.()) ?? snapshot;
     const observedAtMs = now();
     const parsedLogs = parseLogEvidence(
-      snapshot.logs,
+      evidence.logs,
       observedAtMs - startedAtMs,
+      evidence.services.map(({ service }) => service),
     );
 
     return evaluateRun({
       scheduleId: snapshot.scheduleId,
       startedAtMs,
-      containers: snapshot.services.map((service) =>
+      containers: evidence.services.map((service) =>
         normalizeState(service, observedAtMs),
       ),
       readiness: [apiReadiness, postgresReadiness],
       fixtureEvents: parsedLogs.events,
       logFailures: parsedLogs.failures,
-      logs: snapshot.logs,
+      logs: evidence.logs,
     });
   }
 }

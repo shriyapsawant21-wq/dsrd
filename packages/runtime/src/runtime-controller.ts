@@ -100,7 +100,11 @@ export class DockerRuntimeController {
     const snapshot: ObservationSnapshot = {
       scheduleId: schedule.id,
       logs: await this.options.compose.collectLogs(),
-      services: await this.options.compose.listServices()
+      services: await this.options.compose.listServices(),
+      refresh: async () => ({
+        logs: await this.options.compose.collectLogs(),
+        services: await this.options.compose.listServices()
+      })
     };
     return this.options.observer.evaluate(snapshot);
   }

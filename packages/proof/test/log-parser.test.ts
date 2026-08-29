@@ -62,4 +62,27 @@ describe("parseLogEvidence", () => {
       [102, "cache_connection_succeeded"],
     ]);
   });
+
+  it("uses structured service identity for a project-prefixed container", () => {
+    const result = parseLogEvidence(
+      [
+        'dsrd-startup-race-api-1 | {"service":"api","event":"db_connection_failed","detail":"connect ECONNREFUSED"}',
+      ],
+      20,
+      ["postgres", "cache", "api", "worker"],
+    );
+
+    expect(result.failures[0]?.service).toBe("api");
+    expect(result.events[0]?.service).toBe("api");
+  });
+
+  it("resolves raw project-prefixed lines against known service names", () => {
+    const result = parseLogEvidence(
+      ["dsrd-startup-race-worker-1 | connect ECONNREFUSED api:3000"],
+      20,
+      ["api", "worker"],
+    );
+
+    expect(result.failures[0]?.service).toBe("worker");
+  });
 });

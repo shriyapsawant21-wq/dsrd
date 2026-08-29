@@ -7,19 +7,40 @@ import type {
 } from "./types.js";
 
 type StructuredFixtureLog = {
+  service?: unknown;
   event?: unknown;
   message?: unknown;
   detail?: unknown;
   timeMs?: unknown;
 };
 
-function splitComposeLine(line: string): { service: string; body: string } {
+function splitComposeLine(line: string): { container: string; body: string } {
   const separator = line.indexOf("|");
-  if (separator < 0) return { service: "unknown", body: line.trim() };
+  if (separator < 0) return { container: "unknown", body: line.trim() };
 
   const containerName = line.slice(0, separator).trim();
-  const service = containerName.replace(/[-_]\d+$/, "");
-  return { service, body: line.slice(separator + 1).trim() };
+  return {
+    container: containerName.replace(/[-_]\d+$/, ""),
+    body: line.slice(separator + 1).trim(),
+  };
+}
+
+function resolveService(
+  container: string,
+  structured: StructuredFixtureLog | undefined,
+  knownServices: readonly string[],
+): string {
+  if (typeof structured?.service === "string") return structured.service;
+  return (
+    [...knownServices]
+      .sort((left, right) => right.length - left.length)
+      .find(
+        (service) =>
+          container === service ||
+          container.endsWith(`-${service}`) ||
+          container.endsWith(`_${service}`),
+      ) ?? container
+  );
 }
 
 function parseStructured(body: string): StructuredFixtureLog | undefined {
@@ -55,13 +76,15 @@ function summary(category: LogFailureCategory, event?: string): string {
 export function parseLogEvidence(
   lines: string[],
   observedAtMs: number,
+  knownServices: readonly string[] = [],
 ): ParsedLogEvidence {
   const events: TimelineEvent[] = [];
   const failures: LogFailureEvidence[] = [];
 
   for (const [lineIndex, raw] of lines.entries()) {
-    const { service, body } = splitComposeLine(raw);
+    const { container, body } = splitComposeLine(raw);
     const structured = parseStructured(body);
+    const service = resolveService(container, structured, knownServices);
     const event =
       typeof structured?.event === "string" ? structured.event : undefined;
     const detail =
