@@ -21,6 +21,8 @@ export async function runCli(
   }
 ): Promise<void> {
   const program = new Command();
+  const runSchedule = dependencies.platform.run.bind(dependencies.platform);
+  const replaySchedule = dependencies.platform.replay.bind(dependencies.platform);
   program.name("race-debugger").description("Explore startup timing races");
 
   program
@@ -41,7 +43,7 @@ export async function runCli(
         candidates,
         delayOptionsMs,
         target,
-        runSchedule: dependencies.platform.run
+        runSchedule
       });
 
       if (result.status === "no_failure") {
@@ -59,7 +61,7 @@ export async function runCli(
     .description("replay a saved failure artifact")
     .action(async (artifactPath: string) => {
       const artifact = await loadFailureArtifact(artifactPath);
-      const result = await replayFailure(artifact, dependencies.platform.replay);
+      const result = await replayFailure(artifact, replaySchedule);
       dependencies.log(
         result.status === "reproduced"
           ? "Replay reproduced expected failure."

@@ -2,12 +2,36 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ExecutionPlatform, RunResult, Schedule, TargetConfig, Workload } from "@dsrd/contracts";
 
 import { loadFailureArtifact } from "./artifact.js";
 import { runCli } from "./cli.js";
 import { fakePlatform } from "./fake-platform.js";
 
 const directories: string[] = [];
+
+class ReceiverDependentPlatform implements ExecutionPlatform {
+  runCalls = 0;
+  replayCalls = 0;
+
+  discover(_target: TargetConfig): Promise<Workload[]> {
+    return fakePlatform.discover(_target);
+  }
+
+  reset(_target: TargetConfig): Promise<void> {
+    return fakePlatform.reset(_target);
+  }
+
+  async run(target: TargetConfig, schedule: Schedule): Promise<RunResult> {
+    this.runCalls += 1;
+    return fakePlatform.run(target, schedule);
+  }
+
+  async replay(target: TargetConfig, schedule: Schedule): Promise<RunResult> {
+    this.replayCalls += 1;
+    return fakePlatform.replay(target, schedule);
+  }
+}
 
 afterEach(async () => {
   await Promise.all(directories.map((directory) => rm(directory, { recursive: true })));
@@ -50,5 +74,24 @@ describe("race-debugger CLI", () => {
     });
 
     expect(output.join("\n")).toContain("Replay reproduced expected failure");
+  });
+
+  it("keeps the execution platform receiver for search and replay", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-"));
+    directories.push(directory);
+    const artifactPath = join(directory, "failure.json");
+    const platform = new ReceiverDependentPlatform();
+
+    await runCli(["search", "--output", artifactPath], {
+      platform,
+      log: () => undefined,
+    });
+    await runCli(["replay", artifactPath], {
+      platform,
+      log: () => undefined,
+    });
+
+    expect(platform.runCalls).toBeGreaterThan(0);
+    expect(platform.replayCalls).toBe(1);
   });
 });
