@@ -206,4 +206,54 @@ describe("RuntimeProofObserver", () => {
     expect(snapshot.refresh).toHaveBeenCalledTimes(2);
     expect(result.status).toBe("pass");
   });
+
+  it("does not reuse the readiness timeout as the worker completion deadline", async () => {
+    const snapshot = runtimeSnapshot();
+    const runningEvidence = {
+      services: snapshot.services.map((service) =>
+        service.service === "worker"
+          ? { service: "worker", state: "running" }
+          : service,
+      ),
+      logs: [] as string[],
+    };
+    snapshot.refresh = vi
+      .fn()
+      .mockResolvedValueOnce(runningEvidence)
+      .mockResolvedValueOnce(runningEvidence)
+      .mockResolvedValueOnce({
+        services: runtimeSnapshot().services,
+        logs: ['worker-1 | {"service":"worker","event":"work_succeeded"}'],
+      });
+    let currentTime = 1_000;
+    const observer = new RuntimeProofObserver({
+      now: () => currentTime,
+      sleep: async (milliseconds) => {
+        currentTime += milliseconds;
+      },
+      httpProbe: async () => ({
+        service: "api",
+        kind: "http",
+        status: "ready",
+        observedAtMs: 1_000,
+      }),
+      tcpProbe: async () => ({
+        service: "postgres",
+        kind: "tcp",
+        status: "ready",
+        observedAtMs: 1_000,
+      }),
+      apiUrl: "http://127.0.0.1:53000/health",
+      postgresHost: "127.0.0.1",
+      postgresPort: 55_432,
+      timeoutMs: 50,
+      pollIntervalMs: 100,
+    });
+
+    const result = await observer.evaluate(snapshot);
+
+    expect(currentTime).toBeGreaterThan(1_050);
+    expect(snapshot.refresh).toHaveBeenCalledTimes(3);
+    expect(result.status).toBe("pass");
+  });
 });

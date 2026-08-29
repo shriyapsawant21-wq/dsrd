@@ -98,14 +98,10 @@ export class RuntimeProofObserver implements RunObserver {
     ]);
     let evidence: Pick<RuntimeSnapshot, "logs" | "services"> = snapshot;
     if (snapshot.refresh !== undefined) {
-      const refreshDeadline = now() + this.options.timeoutMs;
       while (true) {
         evidence = await snapshot.refresh();
         if (observationIsTerminal(evidence.services)) break;
-
-        const remainingMs = refreshDeadline - now();
-        if (remainingMs <= 0) break;
-        await sleep(Math.min(this.options.pollIntervalMs, remainingMs));
+        await sleep(this.options.pollIntervalMs);
       }
     }
     const observedAtMs = now();
