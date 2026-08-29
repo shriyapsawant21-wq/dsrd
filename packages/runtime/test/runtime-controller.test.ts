@@ -165,6 +165,27 @@ describe("DockerRuntimeController", () => {
     await run;
   });
 
+  it("cancels a delayed independent start when a sibling start fails", async () => {
+    const compose = new RecordingCompose();
+    compose.failStartFor = "api";
+    const delay = new BlockingDelay();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay,
+      observer: new RecordingObserver(),
+    });
+
+    await expect(controller.runSchedule({
+      id: "failed-api-before-postgres",
+      perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
+    }, ["api", "postgres"])).rejects.toThrow("cannot start api");
+
+    delay.release();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(compose.actions).not.toContain("start:postgres");
+    expect(compose.actions.at(-1)).toBe("stop");
+  });
+
   it("stops the stack when a service fails to start", async () => {
     const compose = new RecordingCompose();
     compose.failStartFor = "api";

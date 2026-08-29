@@ -110,10 +110,7 @@ export class DockerRuntimeController {
     );
     const independentlyScheduled = [...startDelays.values()].some((delayMs) => delayMs > 0);
     if (independentlyScheduled) {
-      await Promise.all(serviceOrder.map(async (service) => {
-        await this.options.delay.wait(startDelays.get(service) ?? 0);
-        await this.options.compose.startService(service, { includeDependencies: false });
-      }));
+      await this.startIndependently(serviceOrder, startDelays);
     } else {
       for (const service of serviceOrder) {
         await this.options.delay.wait(0);
@@ -141,6 +138,46 @@ export class DockerRuntimeController {
       })
     };
     return this.options.observer.evaluate(snapshot);
+  }
+
+  private async startIndependently(
+    serviceOrder: string[],
+    startDelays: ReadonlyMap<string, number>,
+  ): Promise<void> {
+    const cancellation = new AbortController();
+    const starts = serviceOrder.map(async (service) => {
+      await this.waitForDelay(startDelays.get(service) ?? 0, cancellation.signal);
+      cancellation.signal.throwIfAborted();
+      await this.options.compose.startService(service, { includeDependencies: false });
+    });
+
+    try {
+      await Promise.all(starts);
+    } catch (error) {
+      cancellation.abort(error);
+      await Promise.allSettled(starts);
+      throw error;
+    }
+  }
+
+  private async waitForDelay(delayMs: number, signal: AbortSignal): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        signal.removeEventListener("abort", onAbort);
+        reject(signal.reason);
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      this.options.delay.wait(delayMs).then(
+        () => {
+          signal.removeEventListener("abort", onAbort);
+          resolve();
+        },
+        (error) => {
+          signal.removeEventListener("abort", onAbort);
+          reject(error);
+        },
+      );
+    });
   }
 
   private async withTimeout<T>(
