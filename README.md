@@ -45,5 +45,9 @@ race-debugger search
 race-debugger replay failure.json
 ```
 
+### PowerShell and POSIX replay hints
+
+When an artifact path contains spaces, shell metacharacters, or apostrophes, use the shell-specific replay command printed after a failed search. The CLI prints separately labeled PowerShell and POSIX commands so that copied paths retain their exact value.
+
 ## MVP Definition of Done
 A bug is only considered discovered when a normally working fixture fails under an explored schedule, the failure is automatically detected, the schedule is minimized, and replay reproduces the same expected failure.

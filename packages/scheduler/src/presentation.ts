@@ -35,7 +35,8 @@ export function renderResultSummary(input: ResultSummaryInput): string {
       return [
         `Failure found after ${input.testedSchedules ?? 0} schedules.`,
         `Saved replay artifact: ${artifactPath}`,
-        `Replay: race-debugger replay ${quotePowerShellArgument(artifactPath)}`
+        `Replay (PowerShell): race-debugger replay ${quotePowerShellArgument(artifactPath)}`,
+        `Replay (POSIX): race-debugger replay ${quotePosixArgument(artifactPath)}`
       ].join("\n");
     case "no-failure":
       return `No failure found after ${input.testedSchedules ?? 0} schedules.`;
@@ -48,4 +49,8 @@ export function renderResultSummary(input: ResultSummaryInput): string {
 
 function quotePowerShellArgument(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
+}
+
+function quotePosixArgument(value: string): string {
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
 }

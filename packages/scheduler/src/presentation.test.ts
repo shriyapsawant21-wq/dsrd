@@ -26,16 +26,24 @@ describe("CLI presentation", () => {
         testedSchedules: 7,
         artifactPath: "failure.json"
       })
-    ).toContain("race-debugger replay 'failure.json'");
+    ).toContain("Replay (PowerShell): race-debugger replay 'failure.json'");
+    expect(
+      renderResultSummary({
+        status: "failure",
+        testedSchedules: 7,
+        artifactPath: "failure.json"
+      })
+    ).toContain("Replay (POSIX): race-debugger replay 'failure.json'");
   });
 
-  it("quotes replay artifact paths for PowerShell", () => {
+  it("renders shell-safe replay commands for PowerShell and POSIX", () => {
     const output = renderResultSummary({
       status: "failure",
       testedSchedules: 1,
       artifactPath: "artifacts/it's $risky; file.json"
     });
 
-    expect(output).toContain("race-debugger replay 'artifacts/it''s $risky; file.json'");
+    expect(output).toContain("Replay (PowerShell): race-debugger replay 'artifacts/it''s $risky; file.json'");
+    expect(output).toContain("Replay (POSIX): race-debugger replay 'artifacts/it'\"'\"'s $risky; file.json'");
   });
 });

@@ -45,6 +45,7 @@ describe("race-debugger CLI", () => {
     expect(readme).toContain("Run `race-debugger` with no command");
     expect(readme).toContain("race-debugger search");
     expect(readme).toContain("race-debugger replay failure.json");
+    expect(readme).toContain("PowerShell and POSIX replay hints");
   });
 
   it("shows the dashboard and routes interactive Search through Commander", async () => {
