@@ -31,7 +31,6 @@ This is a dynamic debugger, not an AI log summarizer or static Compose linter.
 - [`docs/plans/riya.md`](docs/plans/riya.md) — Riya plan
 - [`docs/plans/shriya.md`](docs/plans/shriya.md) — Shriya plan
 - [`docs/runbooks/demo.md`](docs/runbooks/demo.md) — golden demo runbook
-- [`docs/prompts/`](docs/prompts/) — Codex start prompts per teammate
 
 ## Target CLI
 
