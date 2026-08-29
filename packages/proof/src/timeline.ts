@@ -5,6 +5,10 @@ function relativeTime(observedAtMs: number, startedAtMs: number): number {
   return Math.max(0, observedAtMs - startedAtMs);
 }
 
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 export function buildWorkloadTimeline(snapshot: WorkloadObservationSnapshot): TimelineEvent[] {
   const stateEvents: TimelineEvent[] = snapshot.states.map((state) => ({
     timeMs: relativeTime(state.observedAtMs, snapshot.startedAtMs),
@@ -30,7 +34,7 @@ export function buildWorkloadTimeline(snapshot: WorkloadObservationSnapshot): Ti
   return [...stateEvents, ...readinessEvents, ...workloadEvents].sort(
     (left, right) =>
       left.timeMs - right.timeMs ||
-      left.service.localeCompare(right.service) ||
-      left.event.localeCompare(right.event),
+      compareText(left.service, right.service) ||
+      compareText(left.event, right.event),
   );
 }

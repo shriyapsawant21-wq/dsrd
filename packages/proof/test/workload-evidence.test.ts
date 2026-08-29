@@ -101,6 +101,21 @@ describe("C3 workload proof evidence", () => {
     });
   });
 
+  it("orders equal-time timeline evidence by locale-independent code points", () => {
+    const snapshot = passingSnapshot();
+    snapshot.states = [];
+    snapshot.readiness = [];
+    snapshot.workloadEvents = [
+      { workload: "ä-worker", timeMs: 20, event: "started" },
+      { workload: "z-worker", timeMs: 20, event: "started" },
+    ];
+
+    expect(buildWorkloadTimeline(snapshot).map((event) => event.service)).toEqual([
+      "z-worker",
+      "ä-worker",
+    ]);
+  });
+
   it("passes without knowing platform-specific service names", () => {
     expect(evaluateWorkloadRun(passingSnapshot())).toMatchObject({
       scheduleId: "generic-normal",
