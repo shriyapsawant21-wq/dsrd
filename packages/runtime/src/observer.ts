@@ -1,4 +1,4 @@
-import type { RunResult } from "@dsrd/contracts";
+import type { RunResult, TimelineEvent } from "@dsrd/contracts";
 
 export type ComposeServiceState = {
   service: string;
@@ -9,8 +9,10 @@ export type ComposeServiceState = {
 
 export type ObservationSnapshot = {
   scheduleId: string;
+  startedAtMs: number;
   logs: string[];
   services: ComposeServiceState[];
+  events: TimelineEvent[];
   signal?: AbortSignal;
   refresh?: () => Promise<{
     logs: string[];
@@ -21,4 +23,3 @@ export type ObservationSnapshot = {
 export interface RunObserver {
   evaluate(snapshot: ObservationSnapshot): Promise<RunResult>;
 }
-

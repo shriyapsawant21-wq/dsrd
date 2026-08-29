@@ -11,7 +11,7 @@ import type { ReadinessDelayAdapter } from "./readiness-delay.js";
 
 export interface ComposeRuntime {
   resetStack(): Promise<void>;
-  startService(service: string): Promise<void>;
+  startService(service: string, options?: { includeDependencies?: boolean }): Promise<void>;
   collectLogs(): Promise<string[]>;
   listServices(): Promise<ComposeServiceState[]>;
   stopStack(): Promise<void>;
@@ -96,6 +96,7 @@ export class DockerRuntimeController {
     serviceOrder: string[],
     signal: AbortSignal,
   ): Promise<RunResult> {
+    const startedAtMs = Date.now();
     await this.options.compose.resetStack();
     for (const perturbation of schedule.perturbations) {
       if (perturbation.phase === "ready") {
@@ -107,16 +108,32 @@ export class DockerRuntimeController {
         .filter((perturbation) => perturbation.phase === "start")
         .map((perturbation) => [perturbation.workloadId, perturbation.delayMs])
     );
-    for (const service of serviceOrder) {
-      const startDelayMs = startDelays.get(service) ?? 0;
-      await this.options.delay.wait(startDelayMs);
-      await this.options.compose.startService(service);
+    const independentlyScheduled = [...startDelays.values()].some((delayMs) => delayMs > 0);
+    if (independentlyScheduled) {
+      await Promise.all(serviceOrder.map(async (service) => {
+        await this.options.delay.wait(startDelays.get(service) ?? 0);
+        await this.options.compose.startService(service, { includeDependencies: false });
+      }));
+    } else {
+      for (const service of serviceOrder) {
+        await this.options.delay.wait(0);
+        await this.options.compose.startService(service);
+      }
     }
 
     const snapshot: ObservationSnapshot = {
       scheduleId: schedule.id,
+      startedAtMs,
       logs: await this.options.compose.collectLogs(),
       services: await this.options.compose.listServices(),
+      events: schedule.perturbations
+        .filter((perturbation) => perturbation.phase === "start" && perturbation.delayMs > 0)
+        .map((perturbation) => ({
+          timeMs: 0,
+          service: perturbation.workloadId,
+          event: "scheduled_start_delay",
+          detail: `${perturbation.delayMs}ms`,
+        })),
       signal,
       refresh: async () => ({
         logs: await this.options.compose.collectLogs(),

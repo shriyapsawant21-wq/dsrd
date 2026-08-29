@@ -17,7 +17,8 @@ class RecordingDiscovery implements ComposeServiceDiscovery {
   async discoverServices() {
     return [
       { id: "postgres" },
-      { id: "api", dependsOn: ["postgres"] }
+      { id: "api", dependsOn: ["postgres"] },
+      { id: "worker", kind: "job" as const },
     ];
   }
 }
@@ -92,7 +93,8 @@ describe("ComposeExecutionPlatform", () => {
         kind: "service",
         dependsOn: ["postgres"],
         perturbablePhases: ["start"]
-      }
+      },
+      { id: "worker", kind: "job", perturbablePhases: ["start"] },
     ]);
   });
 
@@ -134,8 +136,8 @@ describe("ComposeExecutionPlatform", () => {
     await expect(platform.replay(target, schedule)).resolves.toMatchObject({ scheduleId: "s1" });
 
     expect(executor.runs).toEqual([
-      { id: "s1", services: ["postgres", "api"] },
-      { id: "replay:s1", services: ["postgres", "api"] }
+      { id: "s1", services: ["postgres", "api", "worker"] },
+      { id: "replay:s1", services: ["postgres", "api", "worker"] }
     ]);
   });
 });

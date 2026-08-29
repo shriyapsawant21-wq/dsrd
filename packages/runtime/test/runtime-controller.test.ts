@@ -59,6 +59,22 @@ class RecordingDelay implements Delay {
   }
 }
 
+class BlockingDelay implements Delay {
+  private releaseDelay?: () => void;
+
+  async wait(delayMs: number): Promise<void> {
+    if (delayMs === 100) {
+      await new Promise<void>((resolve) => {
+        this.releaseDelay = resolve;
+      });
+    }
+  }
+
+  release(): void {
+    this.releaseDelay?.();
+  }
+}
+
 class RecordingObserver implements RunObserver {
   snapshot?: ObservationSnapshot;
 
@@ -109,10 +125,10 @@ describe("DockerRuntimeController", () => {
     expect(compose.actions).toEqual([
       "reset",
       "wait:100",
-      "start:postgres",
       "wait:0",
-      "start:api",
       "wait:25",
+      "start:postgres",
+      "start:api",
       "start:worker",
       "logs",
       "ps",
@@ -124,6 +140,29 @@ describe("DockerRuntimeController", () => {
       services: [],
     });
     expect(observer.snapshot?.refresh).toBeTypeOf("function");
+  });
+
+  it("starts un-delayed services before a delayed service becomes startable", async () => {
+    const compose = new RecordingCompose();
+    const delay = new BlockingDelay();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay,
+      observer: new RecordingObserver(),
+    });
+
+    const run = controller.runSchedule({
+      id: "delay-postgres",
+      perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
+    }, ["postgres", "api", "worker"]);
+
+    await vi.waitFor(() => {
+      expect(compose.actions).toEqual(expect.arrayContaining(["start:api", "start:worker"]));
+    });
+    expect(compose.actions).not.toContain("start:postgres");
+
+    delay.release();
+    await run;
   });
 
   it("stops the stack when a service fails to start", async () => {

@@ -52,13 +52,13 @@ Blockers: none
 Next checkpoint: C4
 
 ## C4 — Compose discovery
-Status: blocked
+Status: complete
 Owner: Akil, Riya, Shriya
-Evidence: Blocked: `fixtures/startup-race/scripts/verify-race.ps1` requires `docker compose up -d --no-deps postgres` and `docker compose up -d --no-deps api`, but Riya's reusable `DockerComposeClient.startService` only issues `docker compose up -d <service>`; the fixture README also records that the controller's pre-observation snapshot can be stale.
-Commit/PR: none
-Remaining work: waiting for Riya to provide generic scheduled service startup without Compose dependency auto-start and a terminal refreshed observation snapshot; then prove baseline pass and automatic real failure discovery.
-Dependencies: waiting on Riya runtime output: generic `--no-deps` scheduled startup plus terminal refreshed observations for the shared proof oracle.
-Blockers: Riya-owned runtime integration is incomplete despite C2 being marked complete; no generic Compose execution can induce the fixture's intentional race or provide reliable final proof evidence.
+Evidence: Implemented: normal pass and automatic generic Compose failure discovery verified; moving to C5. Fresh `npm test && npm run build && npm run typecheck` passed (22 test files, 83 tests); the real Compose integration test verified minimized delayed-Postgres failure timeline evidence.
+Commit/PR: feat/generic-compose-integration
+Remaining work: none
+Dependencies: ready
+Blockers: none
 Next checkpoint: C5
 
 ## C5 — Minimized artifact and replay
