@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -39,6 +39,69 @@ afterEach(async () => {
 });
 
 describe("race-debugger CLI", () => {
+  it("documents the bare interactive command", async () => {
+    const readme = await readFile(join(process.cwd(), "README.md"), "utf8");
+
+    expect(readme).toContain("Run `race-debugger` with no command");
+    expect(readme).toContain("race-debugger search");
+    expect(readme).toContain("race-debugger replay failure.json");
+    expect(readme).toContain("PowerShell and POSIX replay hints");
+  });
+
+  it("shows the dashboard and routes interactive Search through Commander", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-"));
+    directories.push(directory);
+    const artifactPath = join(directory, "failure.json");
+    const answers = ["s", "", "race.json", "", artifactPath];
+    const output: string[] = [];
+
+    await runCli([], {
+      platform: fakePlatform,
+      log: (message) => output.push(message),
+      interactive: true,
+      useColor: false,
+      prompt: { ask: async () => answers.shift() ?? "", close: () => undefined }
+    });
+
+    expect(output.join("\n")).toContain("Discover, minimize, and replay startup race conditions.");
+    await expect(loadFailureArtifact(artifactPath)).resolves.toMatchObject({ version: 2 });
+  });
+
+  it("quits from the dashboard without platform execution", async () => {
+    const platform = new ReceiverDependentPlatform();
+    const output: string[] = [];
+
+    await runCli([], {
+      platform,
+      log: (message) => output.push(message),
+      interactive: true,
+      prompt: { ask: async () => "q", close: () => undefined }
+    });
+
+    expect(platform.runCalls).toBe(0);
+    expect(platform.replayCalls).toBe(0);
+    expect(output.join("\n")).toContain("See you next time.");
+  });
+
+  it("does not prompt for a bare non-interactive invocation", async () => {
+    let prompted = false;
+
+    await runCli([], {
+      platform: fakePlatform,
+      log: () => undefined,
+      interactive: false,
+      prompt: {
+        ask: async () => {
+          prompted = true;
+          return "s";
+        },
+        close: () => undefined
+      }
+    });
+
+    expect(prompted).toBe(false);
+  });
+
   it("searches with the injected runner and writes a replay artifact", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-"));
     directories.push(directory);
