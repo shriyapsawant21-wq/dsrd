@@ -8,7 +8,7 @@ export type LogoMotion = {
 export function getLogoMotion(scrollY: number, viewportWidth: number, viewportHeight: number): LogoMotion {
   const travel = Math.max(240, viewportHeight * 0.4);
   const progress = Math.min(1, Math.max(0, scrollY / travel));
-  const startWidth = Math.min(viewportWidth * 0.72, 780);
+  const startWidth = Math.min(viewportWidth * 0.86, 1000);
   const interpolate = (start: number, end: number) => start + (end - start) * progress;
   return {
     left: interpolate(viewportWidth / 2, viewportWidth * 0.055),
