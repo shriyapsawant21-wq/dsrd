@@ -4,8 +4,14 @@ export type RunRecord = { id: string; progress: Progress; failures: FailureSumma
 export type TimelineEvent = { timeMs: number; service: string; event: string; detail?: string };
 export type FailureDetail = { id: string; reason: string; severity: string; events: TimelineEvent[]; originalSchedule: unknown; minimizedSchedule: unknown };
 
-export async function createRun(file: File): Promise<{ runId: string }> {
-  const body = new FormData(); body.append("composeFile", file);
+type FolderFile = File & { webkitRelativePath?: string };
+
+export async function createRun(files: Iterable<File>): Promise<{ runId: string }> {
+  const selected = [...files];
+  const paths = selected.map((file) => (file as FolderFile).webkitRelativePath || file.name);
+  const body = new FormData();
+  body.append("relativePaths", JSON.stringify(paths));
+  selected.forEach((file) => body.append("projectFiles", file));
   const response = await fetch("/api/runs", { method: "POST", body });
   if (!response.ok) throw new Error((await response.json()).error ?? "Upload failed");
   return response.json();
