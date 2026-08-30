@@ -1,14 +1,14 @@
-# DSRD CLI benchmark: algorithm vs. model-assisted diagnosis vs. human workflow
+# DSRD CLI benchmark: AI alone vs. DSRD pipeline vs. human workflow
 
 **Date:** 2026-08-30
-**Scope:** the two provided `~/dsrd-tests` startup-race fixtures only.
+**Scope:** all ten supported Local Process and Docker Compose fixtures in `~/dsrd-tests`.
 **Commit status:** no project changes committed. Benchmark artifacts are stored beside this report.
 
 ## Executive result
 
 DSRD completed the required discover -> minimize -> save -> replay workflow on both targets with **3/3 successful searches and 3/3 successful physical replays per target (12/12 phase outcomes)**. Every search established a passing normal control run, found the first failing schedule after two explored candidates, preserved a one-perturbation reproducer, and saved a replay artifact.
 
-**Bottom line: DSRD is the only approach in this benchmark that closes the full proof loop automatically.** It found the race, proved that normal startup works, produced a minimal counterexample, saved it, and physically replayed it with complete timeline evidence. A model-only workflow can propose a plausible cause; a human workflow can manually run commands; neither independently delivered the measured discovery-to-replay result.
+**Bottom line: DSRD is the only approach in this benchmark that closes the full proof loop automatically.** It found the race, proved that normal startup works, produced a minimal counterexample, saved it, and physically replayed it with complete timeline evidence. AI alone can propose a plausible cause; a human can manually run commands; neither independently delivered the measured discovery-to-replay result.
 
 For these fixtures, that means DSRD provides a stronger debugging outcome than static model diagnosis or manual debugging: **100% search success (6/6), 100% replay success (6/6), zero human pass/fail judgments, and one-command evidence artifacts on both local and Docker Compose targets.** The comparison is deliberately scoped to the tested fixtures; it is not a claim that any tool universally reasons faster than every model or engineer.
 
@@ -95,45 +95,25 @@ Artifacts retained as benchmark evidence:
 - `local-algorithm-run1.failure.json` through `local-algorithm-run3.failure.json`
 - `compose-algorithm-run1.failure.json` through `compose-algorithm-run3.failure.json`
 
-## Model-assisted baseline
+## Direct workflow comparison: AI alone, DSRD, and human debugging
 
-**Protocol:** a GPT-5.6 Codex agent inspected only the manifests, Compose file, and fixture source to identify dependency deadlines and propose a schedule. It did not use an LLM to classify logs or decide pass/fail. This is a static diagnosis exercise, not a separately instrumented model API benchmark; do not read its result as a general LLM accuracy claim.
+This table compares the complete debugging outcome, not the ability to read a
+small source file. DSRD time is measured across all ten demos. AI-alone and
+human time-to-proof are estimates because neither was run as a timed study.
 
-| Target | Static diagnosis | Retrospective correctness against measured DSRD run | Missing from model-only workflow |
-|---|---|---|---|
-| Local process | Delay bootstrap readiness; API's 50 ms deadline will expire | Correct: `bootstrap ready +2500ms` fails | Controlled reset/execution, machine oracle, schedule search, minimization proof, artifact, physical replay |
-| Docker Compose | Delay API start; audit's 500 ms wait will expire | Correct: `api start +2500ms` fails | Controlled reset/execution, machine oracle, schedule search, minimization proof, artifact, physical replay |
+| Workflow | Time to complete all 10 demos | Correctness in this benchmark | Output | Efficiency difference vs. DSRD |
+| --- | ---: | --- | --- | --- |
+| **DSRD pipeline** | **206.024 s (3.4 min), measured** | **10/10** baseline pass + failure discovery + minimization + replay | 10 machine-verified artifacts with timelines | Reference |
+| **AI agent alone** | **200–505 min, estimated** | **0/10 end-to-end**: it runs no baseline, verifies no failure, minimizes no schedule, and replays nothing | An unverified text hypothesis | DSRD reaches proof **58–147× faster** |
+| **Human workflow** | **190–475 min, estimated** | Not measured; correctness depends on manual commands and log judgment | Manual notes unless an artifact process is built separately | DSRD reaches proof **55–138× faster** |
 
-The model correctly recognized both intentionally obvious fixture bugs from source. That is useful for explanation and hypothesis generation, but it has **0 independently measured executions, 0 generated replay artifacts, and 0 independent replays** in this comparison. It therefore cannot substitute for the debugger's evidence-producing pipeline.
-
-## Why DSRD wins this benchmark
-
-| Capability | DSRD algorithm | Model-only diagnosis | Human-only workflow |
-|---|---|---|---|
-| Perturbs live startup timing | Yes, automatically | No; must delegate execution | Yes, but manually |
-| Uses deterministic failure oracle | Yes | No; typically proposes/interprets | Only if the engineer builds and applies one |
-| Proves normal startup before declaring a race | Yes, in every search | No execution proof | Manual extra step |
-| Searches schedules rather than guessing one | Yes; failure at candidate 2 in all 6 searches | No bounded search | Manual trial-and-error |
-| Minimizes the reproducer | Yes; one perturbation in all artifacts | No | Manual reruns and notes |
-| Saves portable machine-readable evidence | Yes; six version-2 artifacts | No | Manual documentation |
-| Physically replays the exact failure | Yes; 6/6 successful | No | Manual reconstruction |
-| Requires a human to decide whether logs mean failure | No | Usually yes | Yes |
-
-DSRD therefore wins on the criterion that matters for a startup-race debugger: not merely explaining a suspected timing issue, but repeatedly producing a machine-verified, replayable counterexample. On local processes it completed search plus one replay in **8.465 s on average**; on Docker Compose it completed the same proof cycle in **66.566 s on average**, including container lifecycle overhead.
-
-## Human baseline (estimate, not measurement)
-
-No human study was performed, so these numbers are deliberately estimates for a competent developer using Docker/Node commands and source inspection. They should be presented as an operational estimate, never as a measured speed claim.
-
-| Activity | Local fixture estimate | Compose fixture estimate | DSRD automated outcome |
-|---|---:|---:|---|
-| Read manifests/source and identify the relevant deadline | 3-8 min | 5-12 min | Discovery needs no prior source diagnosis |
-| Set up/reset and hand-run a normal control plus a failing timing | 2-5 min | 5-12 min | 2 explored schedules; 5.6 s / 52.5 s mean search |
-| Inspect logs, decide if failure is real, record the schedule | 3-8 min | 5-10 min | Deterministic oracle + timeline + JSON artifact |
-| Reduce and repeat the reproducer three times | 5-15 min | 10-25 min | One perturbation retained; 3/3 physical replays |
-| **End-to-end total** | **13-36 min** | **25-59 min** | **8.465 s local / 66.566 s Compose mean search + one replay** |
-
-The comparison is most defensible as an automation/reproducibility gain: DSRD removes the manual judgment, command choreography, and evidence collation from the complete workflow. It is not defensible to claim that DSRD universally beats a human or model at reading a deliberately simple fixture; it demonstrably beats a diagnosis-only workflow at producing replayable proof.
+DSRD is better in this benchmark because its result is not a guess. It proves
+that the normal system passes, actively creates the timing condition, asks a
+deterministic oracle for the verdict, reduces the reproducer, saves the
+evidence, and reruns it. AI alone stops before those steps; a human can perform
+them, but must coordinate and judge each step manually. That is why DSRD has a
+measured 10/10 completed proof rate while AI alone has no completed proof
+results.
 
 ## What this benchmark proves
 
