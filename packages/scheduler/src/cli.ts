@@ -1,13 +1,13 @@
 import { Command } from "commander";
 import { stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { loadFailureArtifact, saveFailureArtifact } from "./artifact.js";
 import { generateCandidates, generateFocusedCandidates } from "./candidates.js";
 import { fakePlatform } from "./fake-platform.js";
 import { discoverFailure, replayFailure } from "./orchestrator.js";
 import { chooseMenuAction, createReadlinePrompt, type PromptAdapter } from "./prompt.js";
-import { renderDashboard, renderResultSummary } from "./presentation.js";
+import { renderDashboard, renderReplaySummary, renderResultSummary } from "./presentation.js";
 import type { ExecutionPlatform, TargetConfig } from "@dsrd/contracts";
 
 const defaultDelayOptionsMs = [0, 500, 1000, 1500, 2000, 3000];
@@ -93,10 +93,13 @@ export async function runCli(
         ? generateFocusedCandidates(workloads, delayOptionsMs)
         : generateCandidates(workloads, delayOptionsMs);
       let runNumber = 0;
+      let failureFound = false;
       const runWithProgress = async (runTarget: TargetConfig, schedule: Parameters<typeof runSchedule>[1]) => {
         runNumber += 1;
-        dependencies.log(`RUN ${runNumber.toString().padStart(2, "0")}  ${describeSchedule(schedule)}`);
+        const verificationLabel = failureFound ? "  (minimization/replay verification)" : "";
+        dependencies.log(`RUN ${runNumber.toString().padStart(2, "0")}${verificationLabel}  ${describeSchedule(schedule)}`);
         const runResult = await runSchedule(runTarget, schedule);
+        if (runResult.status === "fail") failureFound = true;
         dependencies.log(runResult.status === "pass" ? "PASS" : "FAIL — race detected");
         dependencies.log("");
         return runResult;
@@ -119,12 +122,24 @@ export async function runCli(
         return;
       }
 
-      await saveFailureArtifact(options.output, result.artifact);
+      const artifactPath = resolve(options.output);
+      await saveFailureArtifact(artifactPath, result.artifact);
+      const dimensions = workloads.reduce(
+        (count, workload) => count + workload.perturbablePhases.length,
+        0
+      );
       dependencies.log(
         renderResultSummary({
           status: "failure",
           testedSchedules: result.testedSchedules,
-          artifactPath: options.output
+          artifactPath,
+          perturbations: result.artifact.minimizedSchedule.perturbations,
+          failureReason: result.artifact.expectedFailureReason,
+          events: result.artifact.events,
+          useColor: dependencies.useColor,
+          scope: { workloads: workloads.length, dimensions, candidates: candidates.length },
+          exploredSchedules: result.testedSchedules,
+          originalPerturbations: result.artifact.originalSchedule.perturbations.length
         })
       );
     });
@@ -135,11 +150,18 @@ export async function runCli(
     .action(async (artifactPath: string) => {
       const artifact = await loadFailureArtifact(artifactPath);
       const result = await replayFailure(artifact, replaySchedule);
-      dependencies.log(
-        renderResultSummary({
-          status: result.status === "reproduced" ? "reproduced" : "not-reproduced"
-        })
-      );
+      const evidenceMatched = artifact.events.filter((expected) =>
+        result.result.events.some((actual) =>
+          actual.service === expected.service && actual.event === expected.event
+        )
+      ).length;
+      dependencies.log(renderReplaySummary(
+        artifact,
+        result.result,
+        result.status === "reproduced" ? "reproduced" : "not-reproduced",
+        dependencies.useColor,
+        evidenceMatched
+      ));
     });
 
   if (args.length === 0) {
@@ -187,7 +209,7 @@ async function collectGuidedArgs(
 
 async function choosePlatform(prompt: PromptAdapter, log: (message: string) => void): Promise<"compose" | "local-process"> {
   while (true) {
-    const answer = (await prompt.ask("Choose a platform [1]: ")).trim();
+    const answer = (await prompt.ask("Choose a platform: ")).trim();
     if (answer === "" || answer === "1") return "compose";
     if (answer === "2") return "local-process";
     log("Choose 1 for Docker Compose or 2 for local process.");
@@ -196,7 +218,7 @@ async function choosePlatform(prompt: PromptAdapter, log: (message: string) => v
 
 async function chooseQuickMode(prompt: PromptAdapter, log: (message: string) => void): Promise<boolean> {
   while (true) {
-    const answer = (await prompt.ask("Choose a scan mode [1]: ")).trim();
+    const answer = (await prompt.ask("Choose a scan mode: ")).trim();
     if (answer === "" || answer === "1") return true;
     if (answer === "2") return false;
     log("Choose 1 for quick scan or 2 for thorough scan.");

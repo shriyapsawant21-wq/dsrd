@@ -94,11 +94,21 @@ describe("race-debugger CLI", () => {
     expect(output.join("\n")).toContain("Discover, minimize, and replay startup race conditions.");
     expect(output.join("\n")).toContain("[1] Docker Compose");
     expect(prompts).toContain("Local-process project directory: ");
+    expect(prompts).toContain("Choose a platform: ");
+    expect(prompts).toContain("Choose a scan mode: ");
+    expect(prompts).not.toContain("Choose a platform [1]: ");
+    expect(prompts).not.toContain("Choose a scan mode [1]: ");
     expect(prompts).toContain("Save results as [failure.json]: ");
     expect(output.join("\n")).toContain("RUN 01");
     expect(output.join("\n")).toContain("PASS\n\nRUN 02");
     expect(output.join("\n")).toContain("FAIL — race detected\n\nRUN 03");
     expect(output.join("\n")).toContain("\n\nFailure found");
+    expect(output.join("\n")).toContain("Found at perturbation: bootstrap ready +2500ms");
+    expect(output.join("\n")).toContain("Failure reason: fake platform: bootstrap unavailable");
+    expect(output.join("\n")).toContain("Failure evidence: api startup_failed at 2500ms — fake platform: bootstrap was not ready");
+    expect(output.join("\n")).toContain("Search scope:");
+    expect(output.join("\n")).toContain("Scope explored: 2 of 3 candidate schedules (stopped at first failure).");
+    expect(output.join("\n")).toContain("Minimization: 1 perturbation(s) → 1 perturbation(s).");
     await expect(loadFailureArtifact(artifactPath)).resolves.toMatchObject({ version: 2 });
   });
 
@@ -193,6 +203,13 @@ describe("race-debugger CLI", () => {
     });
 
     expect(output.join("\n")).toContain("Replay reproduced expected failure");
+    expect(output.join("\n")).toContain("Replay target:");
+    expect(output.join("\n")).toContain("Replay perturbation: bootstrap ready +1000ms");
+    expect(output.join("\n")).toContain("Expected failure: fake platform: bootstrap unavailable");
+    expect(output.join("\n")).toContain("Observed failure: fake platform: bootstrap unavailable");
+    expect(output.join("\n")).toContain("Replay evidence: api startup_failed at 1000ms — fake platform: bootstrap was not ready");
+    expect(output.join("\n")).toContain("Replay execution: FAIL");
+    expect(output.join("\n")).toContain("Evidence matched: 1/1 timeline events.");
   });
 
   it("keeps the execution platform receiver for search and replay", async () => {
