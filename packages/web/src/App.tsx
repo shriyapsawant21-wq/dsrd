@@ -1,8 +1,9 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { Cpu, Radio, Terminal, Upload, Download, ArrowLeft, FileCode2 } from "lucide-react";
+import { Cpu, Radio, Terminal, Upload, Download, ArrowLeft, FileCode2, Moon, Sun } from "lucide-react";
 import { createRun, getFailure, getRun, subscribeRun, type FailureDetail, type Progress, type RunRecord } from "./api";
 import { getLogoMotion } from "./logo-motion";
 import { getDemoFailureDetail, getReportFailures } from "./report-data";
+import { getInitialTheme, toggleTheme, type Theme } from "./theme";
 
 type Screen = "landing" | "exploring" | "report" | "detail" | "no_failure" | "error";
 const initialProgress: Progress = { runId: "", phase: "queued", percentage: 0, message: "INITIALIZING", testedSchedules: 0, failureCount: 0 };
@@ -10,6 +11,7 @@ const initialProgress: Progress = { runId: "", phase: "queued", percentage: 0, m
 export default function App() {
   const [screen, setScreen] = useState<Screen>("landing"); const [progress, setProgress] = useState(initialProgress);
   const [run, setRun] = useState<RunRecord>(); const [detail, setDetail] = useState<FailureDetail>(); const [error, setError] = useState("");
+  const [theme, setTheme] = useState<Theme>(() => getInitialTheme(localStorage.getItem("dsrd-theme")));
   const [dragging, setDragging] = useState(false); const input = useRef<HTMLInputElement>(null); const movingLogo = useRef<HTMLImageElement>(null);
   useLayoutEffect(() => {
     let frame = 0;
@@ -39,8 +41,9 @@ export default function App() {
   const openDetail = async (failureId: string) => { if (!run) return; try { setDetail(await getFailure(run.id, failureId)); } catch { setDetail(getDemoFailureDetail()); } setScreen("detail"); };
   const reset = () => { window.scrollTo({ top: 0, behavior: "auto" }); setScreen("landing"); setRun(undefined); setDetail(undefined); setError(""); };
   const reportFailures = getReportFailures(run?.failures);
-  return <div className="app">
-    <header className="nav"><button className="brand" onClick={reset} aria-label="DSRD home">{screen !== "landing" && <img className="docked-logo" src="/dsrd-logo.png" alt=""/>}</button><div className="nav-icons"><Cpu size={15}/><Radio size={15}/><Terminal size={16}/></div></header>
+  const switchTheme = () => { const next = toggleTheme(theme); localStorage.setItem("dsrd-theme", next); setTheme(next); };
+  return <div className="app" data-theme={theme}>
+    <header className="nav"><button className="brand" onClick={reset} aria-label="DSRD home">{screen !== "landing" && <img className="docked-logo" src="/dsrd-logo.png" alt=""/>}</button><div className="nav-icons"><Cpu size={15}/><Radio size={15}/><Terminal size={16}/><button className="theme-toggle" onClick={switchTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>{theme === "dark" ? <Sun size={17}/> : <Moon size={17}/>}</button></div></header>
     {screen === "landing" && <main>
       <img ref={movingLogo} src="/dsrd-logo.png" className="moving-logo" alt="DSRD"/>
       <section className="hero"><div className="scroll-cue">SCROLL_TO_INITIALIZE<br/><span>↓</span></div></section>
