@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Schedule, TargetConfig, Workload } from "../packages/contracts/src/index.js";
@@ -10,7 +13,14 @@ import {
   NodeCommandRunner,
   SystemDelay,
 } from "../packages/runtime/src/index.js";
-import { discoverFailure } from "../packages/scheduler/src/orchestrator.js";
+import {
+  loadFailureArtifact,
+  saveFailureArtifact,
+} from "../packages/scheduler/src/artifact.js";
+import {
+  discoverFailure,
+  replayFailure,
+} from "../packages/scheduler/src/orchestrator.js";
 import { afterAll, describe, expect, it } from "vitest";
 
 const workspaceRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -30,7 +40,7 @@ describe("generic Compose discovery", () => {
     await compose.resetStack();
   });
 
-  it("passes normally then discovers the delayed-workload failure with timeline evidence", async () => {
+  it("discovers, saves, and replays minimized Compose failure evidence", async () => {
     let workloads: Workload[] = [];
     const controller = new DockerRuntimeController({
       compose,
@@ -70,6 +80,9 @@ describe("generic Compose discovery", () => {
       expect(result.artifact.minimizedSchedule.perturbations).toEqual([
         { workloadId: "postgres", phase: "start", delayMs: 3_000 },
       ]);
+      expect(result.artifact.minimizedSchedule.perturbations.length).toBeLessThanOrEqual(
+        result.artifact.originalSchedule.perturbations.length,
+      );
 
       const delay = result.artifact.events.find(
         (event) => event.service === "postgres" && event.event === "scheduled_start_delay",
@@ -80,6 +93,38 @@ describe("generic Compose discovery", () => {
       expect(delay).toBeDefined();
       expect(databaseFailure).toBeDefined();
       expect(delay?.timeMs).toBeLessThan(databaseFailure?.timeMs ?? Number.POSITIVE_INFINITY);
+
+      const directory = await mkdtemp(join(tmpdir(), "dsrd-compose-replay-"));
+      const artifactPath = join(directory, "failure.json");
+      try {
+        await saveFailureArtifact(artifactPath, result.artifact);
+        const savedArtifact = await loadFailureArtifact(artifactPath);
+        expect(savedArtifact).toMatchObject({
+          version: 2,
+          target,
+          minimizedSchedule: result.artifact.minimizedSchedule,
+        });
+
+        const replay = await replayFailure(
+          savedArtifact,
+          platform.replay.bind(platform),
+        );
+        expect(replay.status).toBe("reproduced");
+        expect(replay.result.events).toContainEqual(
+          expect.objectContaining({
+            service: "postgres",
+            event: "scheduled_start_delay",
+          }),
+        );
+        expect(replay.result.events).toContainEqual(
+          expect.objectContaining({
+            service: "api",
+            event: "db_connection_failed",
+          }),
+        );
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
     }
-  }, 120_000);
+  }, 180_000);
 });

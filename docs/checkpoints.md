@@ -62,13 +62,13 @@ Blockers: none
 Next checkpoint: C5
 
 ## C5 — Minimized artifact and replay
-Status: blocked
+Status: complete
 Owner: Akil, Riya, Shriya
-Evidence: v1 fake replay passes; generic real replay not run
-Commit/PR: none
-Remaining work: save v2 artifact and reproduce failure through adapter replay
-Dependencies: C4
-Blockers: no real generic failure artifact
+Evidence: Implemented: minimized v2 artifact and deterministic replay evidence verified; moving to C6. Fresh `npm test && npm run build && npm run typecheck` passed (22 test files, 91 tests); the real Compose integration saved and reloaded the target-aware artifact, replayed its minimized schedule through `ExecutionPlatform.replay`, and reproduced the saved oracle evidence.
+Commit/PR: feat/generic-replay (commit reported in checkpoint handoff)
+Remaining work: none
+Dependencies: ready
+Blockers: none
 Next checkpoint: C6
 
 ## C6 — Local-process adapter

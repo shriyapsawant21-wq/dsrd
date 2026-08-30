@@ -1,4 +1,10 @@
-import type { FailureArtifact, RunResult, Schedule, TargetConfig } from "@dsrd/contracts";
+import type {
+  FailureArtifact,
+  RunResult,
+  Schedule,
+  TargetConfig,
+  TimelineEvent
+} from "@dsrd/contracts";
 
 import { createFailureArtifact } from "./artifact.js";
 import { minimizeSchedule } from "./minimize.js";
@@ -69,9 +75,23 @@ export async function replayFailure(
   const reasonMatches =
     artifact.expectedFailureReason === undefined ||
     artifact.expectedFailureReason === result.failureReason;
+  const evidenceMatches = artifact.events.every((expected) =>
+    result.events.some((actual) => sameEvidence(expected, actual))
+  );
 
   return {
-    status: result.status === "fail" && reasonMatches ? "reproduced" : "not_reproduced",
+    status:
+      result.status === "fail" && reasonMatches && evidenceMatches
+        ? "reproduced"
+        : "not_reproduced",
     result
   };
+}
+
+function sameEvidence(expected: TimelineEvent, actual: TimelineEvent): boolean {
+  return (
+    expected.service === actual.service &&
+    expected.event === actual.event &&
+    expected.detail === actual.detail
+  );
 }
