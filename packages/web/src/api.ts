@@ -6,11 +6,12 @@ export type FailureDetail = { id: string; reason: string; severity: string; even
 
 type FolderFile = File & { webkitRelativePath?: string };
 
-export async function createRun(files: Iterable<File>): Promise<{ runId: string }> {
+export async function createRun(files: Iterable<File>, platform?: "compose" | "local-process"): Promise<{ runId: string }> {
   const selected = [...files];
   const paths = selected.map((file) => (file as FolderFile).webkitRelativePath || file.name);
   const body = new FormData();
   body.append("relativePaths", JSON.stringify(paths));
+  if (platform) body.append("platform", platform);
   selected.forEach((file) => body.append("projectFiles", file));
   const response = await fetch("/api/runs", { method: "POST", body });
   if (!response.ok) {

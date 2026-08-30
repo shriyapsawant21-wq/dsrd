@@ -12,7 +12,8 @@ export type MaterializedProject = {
 
 export async function materializeProject(
   files: Express.Multer.File[],
-  relativePathsJson: unknown
+  relativePathsJson: unknown,
+  requestedPlatform?: unknown
 ): Promise<MaterializedProject> {
   const relativePaths = parseRelativePaths(relativePathsJson, files.length);
   const projectDirectory = await mkdtemp(join(tmpdir(), "dsrd-web-run-"));
@@ -30,10 +31,13 @@ export async function materializeProject(
     const composeFiles = relativePaths.filter((path) => composeNames.has(basename(path)));
     const manifestFiles = relativePaths.filter((path) => basename(path) === "manifest.json");
     if (composeFiles.length + manifestFiles.length === 0) throw new Error("No supported project target found");
-    if (composeFiles.length > 1 || manifestFiles.length > 1 || (composeFiles.length > 0 && manifestFiles.length > 0)) {
+    if (composeFiles.length > 1 || manifestFiles.length > 1 || (composeFiles.length > 0 && manifestFiles.length > 0 && requestedPlatform === undefined)) {
       throw new Error("Multiple project targets found; keep one Compose file or one manifest.json");
     }
-    const target: TargetConfig = composeFiles.length === 1
+    if (requestedPlatform !== undefined && requestedPlatform !== "compose" && requestedPlatform !== "local-process") throw new Error("Invalid project target selection");
+    if (requestedPlatform === "compose" && composeFiles.length !== 1) throw new Error("No Compose file found in project folder");
+    if (requestedPlatform === "local-process" && manifestFiles.length !== 1) throw new Error("No manifest.json found in project folder");
+    const target: TargetConfig = (requestedPlatform === "compose" || (requestedPlatform === undefined && composeFiles.length === 1))
       ? { platform: "compose", composeFile: resolveSafeDestination(projectDirectory, composeFiles[0]) }
       : { platform: "local-process", manifestPath: resolveSafeDestination(projectDirectory, manifestFiles[0]) };
     return { projectDirectory, target };

@@ -19,7 +19,7 @@ export function createApp(store: RunStore, service: RunService) {
       if (!Array.isArray(req.files) || req.files.length === 0) {
         return res.status(400).json({ error: "Select a project folder containing one Compose file" });
       }
-      const { target } = await materializeProject(req.files, req.body.relativePaths);
+      const { target } = await materializeProject(req.files, req.body.relativePaths, req.body.platform);
       const run = store.create();
       void service.start(run.id, target);
       return res.status(202).json({ runId: run.id, status: "queued" });
