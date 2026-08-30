@@ -3,11 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { RunResult, Schedule, TargetConfig, Workload } from "../packages/contracts/src/index.js";
+import type { Schedule, TargetConfig, Workload } from "../packages/contracts/src/index.js";
 import { ComposeProofObserver } from "../packages/proof/src/index.js";
 import {
   ComposeExecutionPlatform,
-  type ComposeScheduleExecutor,
   DockerComposeClient,
   DockerComposeServiceDiscovery,
   DockerRuntimeController,
@@ -29,6 +28,7 @@ const target: TargetConfig = {
   platform: "compose",
   composeFile: "fixtures/startup-race/compose.yaml",
 };
+const replaySafePostgresDelayMs = 15_000;
 const runner = new NodeCommandRunner();
 const compose = new DockerComposeClient({
   projectDirectory: workspaceRoot,
@@ -64,10 +64,12 @@ describe("generic Compose discovery", () => {
         baseline,
         {
           id: "delay-postgres-start",
-          perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 3_000 }],
+          perturbations: [
+            { workloadId: "postgres", phase: "start", delayMs: replaySafePostgresDelayMs },
+          ],
         },
       ],
-      delayOptionsMs: [0, 3_000],
+      delayOptionsMs: [0, replaySafePostgresDelayMs],
       runSchedule: platform.run.bind(platform),
       createdAt: "2026-08-30T00:00:00.000Z",
     });
@@ -76,10 +78,12 @@ describe("generic Compose discovery", () => {
     if (result.status === "found_failure") {
       expect(result.artifact.originalSchedule).toEqual({
         id: "delay-postgres-start",
-        perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 3_000 }],
+        perturbations: [
+          { workloadId: "postgres", phase: "start", delayMs: replaySafePostgresDelayMs },
+        ],
       });
       expect(result.artifact.minimizedSchedule.perturbations).toEqual([
-        { workloadId: "postgres", phase: "start", delayMs: 3_000 },
+        { workloadId: "postgres", phase: "start", delayMs: replaySafePostgresDelayMs },
       ]);
       expect(result.artifact.minimizedSchedule.perturbations.length).toBeLessThanOrEqual(
         result.artifact.originalSchedule.perturbations.length,
@@ -106,19 +110,7 @@ describe("generic Compose discovery", () => {
           minimizedSchedule: result.artifact.minimizedSchedule,
         });
 
-        const replayPlatform = new ComposeExecutionPlatform({
-          discovery: new DockerComposeServiceDiscovery({ projectDirectory: workspaceRoot, runner }),
-          executorFor: () =>
-            new ArtifactReplayExecutor(savedArtifact.minimizedSchedule, {
-              scheduleId: savedArtifact.minimizedSchedule.id,
-              status: "fail",
-              failureReason: savedArtifact.expectedFailureReason,
-              events: savedArtifact.events,
-              logs: savedArtifact.events.map((event) => JSON.stringify(event)),
-            }),
-        });
-
-        const replay = await replayFailure(savedArtifact, replayPlatform.replay.bind(replayPlatform));
+        const replay = await replayFailure(savedArtifact, platform.replay.bind(platform));
         expect(replay.status).toBe("reproduced");
         expect(replay.result.events).toContainEqual(
           expect.objectContaining({
@@ -138,23 +130,3 @@ describe("generic Compose discovery", () => {
     }
   }, 180_000);
 });
-
-class ArtifactReplayExecutor implements ComposeScheduleExecutor {
-  constructor(
-    private readonly expectedSchedule: Schedule,
-    private readonly result: RunResult,
-  ) {}
-
-  resetStack(): Promise<void> {
-    throw new Error("artifact replay test should not reset the real Compose stack");
-  }
-
-  runSchedule(): Promise<RunResult> {
-    throw new Error("artifact replay test should not execute discovery schedules");
-  }
-
-  replaySchedule(schedule: Schedule): Promise<RunResult> {
-    expect(schedule).toEqual(this.expectedSchedule);
-    return Promise.resolve(this.result);
-  }
-}
