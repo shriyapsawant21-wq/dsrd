@@ -1,0 +1,25 @@
+{
+  "resetCommand": ["node", "reset.mjs"],
+  "workloads": [
+    {
+      "id": "bootstrap",
+      "kind": "initializer",
+      "command": ["node", "bootstrap.mjs"],
+      "perturbablePhases": ["ready"]
+    },
+    {
+      "id": "api",
+      "kind": "process",
+      "dependsOn": ["bootstrap"],
+      "command": ["node", "api.mjs"],
+      "perturbablePhases": ["start"]
+    },
+    {
+      "id": "audit",
+      "kind": "job",
+      "dependsOn": ["api"],
+      "command": ["node", "audit.mjs"],
+      "perturbablePhases": []
+    }
+  ]
+}
