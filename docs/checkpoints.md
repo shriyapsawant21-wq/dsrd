@@ -82,11 +82,11 @@ Blockers: none
 Next checkpoint: C7
 
 ## C7 — Kubernetes adapter
-Status: in progress
+Status: blocked
 Owner: Riya, Shriya, Akil
-Evidence: Implemented: optional Kubernetes ExecutionPlatform discovery, schedule validation, reset/run/replay delegation, and fake-executor tests. Pending live-cluster verification with fixtures/kubernetes-startup-race/manifest.yaml; no Kubernetes package or cluster dependency was added to Compose/local development.
+Evidence: Implemented: optional Kubernetes ExecutionPlatform discovery, schedule validation, reset/run/replay delegation, kubectl client-side discovery, and fake-executor tests. Live verification blocked: `kubectl auth can-i create namespaces` returned `no`; `kubectl cluster-info` reported forbidden access to kube-system services.
 Commit/PR: feat/kubernetes-adapter
-Remaining work: run the disposable-cluster verification and record normal startup, a discovered failure, minimized schedule, and deterministic replay evidence.
-Dependencies: explicit admission received; waiting on live cluster verification output.
-Blockers: none
+Remaining work: grant a disposable namespace or namespace-scoped create/get/log/delete permissions, then run and record normal startup, a discovered failure, minimized schedule, and deterministic replay evidence.
+Dependencies: waiting on cluster administrator permission grant for the configured EKS context.
+Blockers: Configured EKS identity `FarlandsInfraTeamContributorRole` cannot create namespaces; cluster-info is forbidden from listing kube-system services.
 Next checkpoint: C7
