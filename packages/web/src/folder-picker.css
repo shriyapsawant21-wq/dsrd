@@ -15,11 +15,14 @@
   min-width: 10rem;
   padding: 0.7rem 1rem;
   border: 1px solid var(--pink);
-  background: #090407;
+  background: transparent;
   color: var(--pink);
+  font: inherit;
+  letter-spacing: 0.05em;
   cursor: pointer;
 }
 
 .target-choice button:hover {
-  background: #26000f;
+  background: var(--pink);
+  color: #030303;
 }

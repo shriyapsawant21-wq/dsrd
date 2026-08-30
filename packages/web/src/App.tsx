@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { Cpu, Radio, Terminal, Upload, Download, ArrowLeft, FileCode2, Moon, Sun } from "lucide-react";
-import { createRun, getFailure, getRun, subscribeRun, type FailureDetail, type Progress, type RunRecord } from "./api";
+import { createRun, detectProjectPlatforms, getFailure, getRun, subscribeRun, type FailureDetail, type Progress, type ProjectPlatform, type RunRecord } from "./api";
 import { getLogoMotion } from "./logo-motion";
 import { getDemoFailureDetail, getReportFailures } from "./report-data";
 import { getInitialTheme, toggleTheme, type Theme } from "./theme";
@@ -17,6 +17,7 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>(() => getInitialTheme(localStorage.getItem("dsrd-theme")));
   const [selectedFolder, setSelectedFolder] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [availablePlatforms, setAvailablePlatforms] = useState<ProjectPlatform[]>([]);
   const [dragging, setDragging] = useState(false); const input = useRef<HTMLInputElement>(null); const movingLogo = useRef<HTMLImageElement>(null);
   useLayoutEffect(() => {
     let frame = 0;
@@ -30,7 +31,7 @@ export default function App() {
     window.addEventListener("scroll", schedulePosition, { passive: true }); window.addEventListener("resize", schedulePosition);
     return () => { cancelAnimationFrame(frame); window.removeEventListener("scroll", schedulePosition); window.removeEventListener("resize", schedulePosition); };
   }, [screen]);
-  const start = async (files?: Iterable<File>, platform?: "compose" | "local-process") => {
+  const start = async (files?: Iterable<File>, platform?: ProjectPlatform) => {
     const projectFiles = files ? [...files] : [];
     if (projectFiles.length === 0) { setError("SELECT_A_COMPOSE_PROJECT_FOLDER"); return; }
     try {
@@ -47,9 +48,12 @@ export default function App() {
   const selectProject = (files?: FileList | null) => {
     if (!files?.length) return;
     const first = files[0] as File & { webkitRelativePath?: string };
+    const projectFiles = [...files];
     setSelectedFolder((first.webkitRelativePath || first.name).split(/[\\/]/)[0]);
-    setSelectedFiles([...files]);
-    void start(files);
+    setSelectedFiles(projectFiles);
+    const platforms = detectProjectPlatforms(projectFiles);
+    setAvailablePlatforms(platforms);
+    setError(platforms.length === 0 ? "PROJECT_TARGET_NOT_FOUND" : "");
   };
   const openProjectPicker = () => {
     if (!input.current) return;
@@ -57,7 +61,7 @@ export default function App() {
     input.current.click();
   };
   const openDetail = async (failureId: string) => { if (!run) return; try { setDetail(await getFailure(run.id, failureId)); } catch { setDetail(getDemoFailureDetail()); } setScreen("detail"); };
-  const reset = () => { window.scrollTo({ top: 0, behavior: "auto" }); setScreen("landing"); setRun(undefined); setDetail(undefined); setSelectedFolder(""); setSelectedFiles([]); setError(""); };
+  const reset = () => { window.scrollTo({ top: 0, behavior: "auto" }); setScreen("landing"); setRun(undefined); setDetail(undefined); setSelectedFolder(""); setSelectedFiles([]); setAvailablePlatforms([]); setError(""); };
   const reportFailures = getReportFailures(run?.failures);
   const switchTheme = () => { const next = toggleTheme(theme); localStorage.setItem("dsrd-theme", next); setTheme(next); };
   return <div className="app" data-theme={theme}>
@@ -65,7 +69,7 @@ export default function App() {
     {screen === "landing" && <main>
       <img ref={movingLogo} src="/dsrd-logo.png" className="moving-logo" alt="DSRD"/>
       <section className="hero"><ScrollCue/></section>
-      <section className="upload-section"><div className="section-title">[ INITIALIZE_SEQUENCE ]</div><button className={`drop-zone ${dragging ? "dragging" : ""}`} onClick={openProjectPicker} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); selectProject(e.dataTransfer.files); }}><span className="corner">IN</span><Upload size={38} strokeWidth={2.4}/><strong>SELECT_PROJECT_FOLDER</strong><span>OR_DRAG_AND_DROP_PROJECT_FILES</span><small>INCLUDES_SOURCE_DOCKERFILES_AND_CONFIG</small></button><input ref={input} className="sr-only" aria-label="Project folder" type="file" multiple onChange={(e) => selectProject(e.target.files)}/>{selectedFolder && <p className="selected-folder">PROJECT: {selectedFolder}</p>}{error && <p className="inline-error">{error}</p>}{error.startsWith("Multiple project targets") && <div className="target-choice"><button onClick={() => void start(selectedFiles, "local-process")}>RUN_AS_LOCAL</button><button onClick={() => void start(selectedFiles, "compose")}>RUN_AS_DOCKER</button></div>}<p className="constraint">SELECT A PROJECT FOLDER // RELATIVE BUILD CONTEXTS ARE PRESERVED</p></section>
+      <section className="upload-section"><div className="section-title">[ INITIALIZE_SEQUENCE ]</div><button className={`drop-zone ${dragging ? "dragging" : ""}`} onClick={openProjectPicker} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); selectProject(e.dataTransfer.files); }}><span className="corner">IN</span><Upload size={38} strokeWidth={2.4}/><strong>SELECT_PROJECT_FOLDER</strong><span>OR_DRAG_AND_DROP_PROJECT_FILES</span></button><input ref={input} className="sr-only" aria-label="Project folder" type="file" multiple onChange={(e) => selectProject(e.target.files)}/>{selectedFolder && <p className="selected-folder">PROJECT: {selectedFolder}</p>}{error && <p className="inline-error">{error}</p>}{availablePlatforms.length > 0 && <div className="target-choice">{availablePlatforms.includes("local-process") && <button onClick={() => void start(selectedFiles, "local-process")}>[ RUN_AS_LOCAL ]</button>}{availablePlatforms.includes("compose") && <button onClick={() => void start(selectedFiles, "compose")}>[ RUN_AS_DOCKER ]</button>}</div>}<p className="constraint">CHOOSE AN EXECUTION MODE TO BEGIN</p></section>
     </main>}
     {screen === "exploring" && <main className="screen exploring"><h1>EXPLORING<span className="blink">..._</span></h1><div className="progress-meta"><span>{progress.message}</span><span>{progress.percentage}%</span></div><div className="progress-track"><div style={{ width: `${progress.percentage}%` }}/></div><div className="system-row"><span>SYS_MEM: 0x7F8C4B</span><span>TESTED: {String(progress.testedSchedules).padStart(3,"0")}</span></div><div className="failure-count">FAILURES: {String(progress.failureCount).padStart(2,"0")}</div></main>}
     {screen === "report" && <main className="screen report"><h2>FAILURES: {String(reportFailures.length).padStart(2,"0")}</h2><div className="failure-table" role="table"><div className="row heading"><span>FAILURE_NAME</span><span>SEVERITY</span></div>{reportFailures.map((failure) => <button className="row" key={failure.id} onClick={() => void openDetail(failure.id)}><span>[{failure.name}]</span><span>{failure.severity.toUpperCase()}</span></button>)}</div><a className="export" href={`/api/runs/${run?.id}/report`} download><Download size={14}/> EXPORT_REPORT</a></main>}
