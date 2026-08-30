@@ -74,6 +74,22 @@ that cost is runtime lifecycle work, not a manual diagnosis step. The complete
 local-only result file is retained at
 `/home/xtrmn8/dsrd-tests/benchmark-results/local-compose-benchmark.json`.
 
+### AI agent alone versus DSRD
+
+For the full ten-demo matrix, an AI agent acting only as a source-reading
+assistant has **0/10 end-to-end correctness** in the benchmark's required
+workflow: it did not execute a normal baseline, confirm a failure, minimize a
+schedule, create an artifact, or replay an outcome. It can suggest a plausible
+cause, but that suggestion remains unproven until another execution workflow
+does the work.
+
+DSRD completed all ten proof cycles in **206.024 seconds**. The estimated
+model-only time-to-proof is **200–505 minutes** when source inspection and the
+necessary human execution workflow are included. This estimate is not a timed
+model study; the measured distinction is that DSRD produced ten
+machine-verified, replayable counterexamples while the model-only workflow
+produced none.
+
 Artifacts retained as benchmark evidence:
 
 - `local-algorithm-run1.failure.json` through `local-algorithm-run3.failure.json`
