@@ -8,9 +8,11 @@
     "fixtures/startup-race/*"
   ],
   "scripts": {
+    "pretest": "npm run build:execution",
     "test": "vitest run packages/contracts && vitest run packages/scheduler && vitest run packages/proof && vitest run packages/runtime && vitest run packages/api && vitest run packages/web && vitest run fixtures/startup-race",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
+    "build:execution": "npm run build --workspace=@dsrd/contracts && npm run build --workspace=@dsrd/proof && npm run build --workspace=@dsrd/runtime && npm run build --workspace=@dsrd/scheduler",
     "dev:api": "npm run build --workspace=@dsrd/api && npm run dev --workspace=@dsrd/api",
     "dev:web": "npm run dev --workspace=@dsrd/web"
   },

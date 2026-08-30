@@ -1,12 +1,15 @@
 import { dirname, resolve } from "node:path";
 
 import type { ExecutionPlatform, Schedule, TargetConfig, Workload } from "@dsrd/contracts";
-import { ComposeProofObserver, WorkloadProofObserver } from "@dsrd/proof";
+import { ComposeProofObserver, KubernetesProofObserver, WorkloadProofObserver } from "@dsrd/proof";
 import {
   ComposeExecutionPlatform,
   DockerComposeClient,
   DockerComposeServiceDiscovery,
   DockerRuntimeController,
+  KubectlKubernetesExecutor,
+  KubectlKubernetesResourceDiscovery,
+  KubernetesExecutionPlatform,
   LocalProcessExecutionPlatform,
   NodeCommandRunner,
   SystemDelay,
@@ -46,9 +49,36 @@ export function createPlatformRouter(options: PlatformRouterOptions): ExecutionP
 }
 
 export function createDefaultPlatform(): ExecutionPlatform {
+  const local = new LocalProcessExecutionPlatform({ observer: new WorkloadProofObserver() });
+  const runner = new NodeCommandRunner();
+  let kubernetesWorkloads: Workload[] = [];
+  const kubernetes = new KubernetesExecutionPlatform({
+    discovery: new KubectlKubernetesResourceDiscovery({ runner }),
+    executorFor: (target) => new KubectlKubernetesExecutor({
+      target,
+      runner,
+      observer: new KubernetesProofObserver(() => kubernetesWorkloads),
+    }),
+  });
+
   return createPlatformRouter({
-    localProcess: new LocalProcessExecutionPlatform({ observer: new WorkloadProofObserver() }),
+    localProcess: local,
     composeFor: createComposePlatform,
+    kubernetes: {
+      discover: async (target) => {
+        kubernetesWorkloads = await kubernetes.discover(target);
+        return kubernetesWorkloads;
+      },
+      reset: (target) => kubernetes.reset(target),
+      run: async (target, schedule) => {
+        kubernetesWorkloads = await kubernetes.discover(target);
+        return kubernetes.run(target, schedule);
+      },
+      replay: async (target, schedule) => {
+        kubernetesWorkloads = await kubernetes.discover(target);
+        return kubernetes.replay(target, schedule);
+      },
+    },
   });
 }
 

@@ -1,7 +1,7 @@
 import type { RunResult, Schedule } from "@dsrd/contracts";
 import { describe, expect, it } from "vitest";
 
-import { searchSchedules } from "./search.js";
+import { searchSchedules, searchCandidateStages } from "./search.js";
 
 const schedules: Schedule[] = [
   { id: "schedule-000", perturbations: [] },
@@ -35,6 +35,42 @@ describe("searchSchedules", () => {
     );
 
     expect(result).toEqual({ status: "no_failure", testedSchedules: 3 });
+  });
+});
+
+describe("searchCandidateStages", () => {
+  it("searches isolated candidates before pairwise and lazily reaches full fallback", async () => {
+    const executed: string[] = [];
+    let fullCreated = false;
+    const stages = [
+      { name: "isolated", candidateCount: 1, create: () => [{ id: "baseline", perturbations: [] }] },
+      { name: "pairwise", candidateCount: 1, create: () => [{ id: "pair", perturbations: [{ workloadId: "api", phase: "start", delayMs: 1 }] }] },
+      { name: "full", candidateCount: 1, create: () => { fullCreated = true; return [{ id: "full", perturbations: [] }]; } },
+    ];
+
+    const result = await searchCandidateStages(stages, target, async (_target, schedule) => {
+      executed.push(schedule.id);
+      return runResult(schedule.id, schedule.id === "pair" ? "fail" : "pass");
+    });
+
+    expect(executed).toEqual(["baseline", "pair"]);
+    expect(fullCreated).toBe(false);
+    expect(result).toMatchObject({ status: "found_failure", testedSchedules: 2 });
+  });
+
+  it("enforces a maximum number of physical schedule executions", async () => {
+    const executed: string[] = [];
+    const result = await searchCandidateStages([
+      { name: "isolated", candidateCount: 3, create: () => schedules },
+      { name: "pairwise", candidateCount: 0, create: () => [] },
+      { name: "full", candidateCount: 0, create: () => [] },
+    ], target, async (_target, schedule) => {
+      executed.push(schedule.id);
+      return runResult(schedule.id, "pass");
+    }, { maxSchedules: 2 });
+
+    expect(executed).toEqual(["schedule-000", "schedule-001"]);
+    expect(result).toEqual({ status: "no_failure", testedSchedules: 2 });
   });
 });
 

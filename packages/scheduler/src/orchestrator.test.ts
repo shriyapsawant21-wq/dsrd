@@ -99,6 +99,25 @@ describe("orchestration", () => {
     });
   });
 
+  it("never exceeds the physical execution budget during minimization", async () => {
+    const calls: string[] = [];
+    await expect(discoverFailure({
+      candidates: [
+        { id: "baseline", perturbations: [] },
+        { id: "failing", perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }] },
+      ],
+      delayOptionsMs: [0, 500, 1000],
+      target,
+      maxSchedules: 2,
+      runSchedule: async (_target, schedule) => {
+        calls.push(schedule.id);
+        return fakeRun(schedule);
+      },
+    })).rejects.toThrow("Maximum schedule execution budget exhausted");
+
+    expect(calls).toEqual(["baseline", "failing"]);
+  });
+
   it("does not reproduce when replay lacks the artifact oracle evidence", async () => {
     const artifact = {
       version: 2 as const,

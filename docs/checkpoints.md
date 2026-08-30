@@ -82,11 +82,11 @@ Blockers: none
 Next checkpoint: C7
 
 ## C7 — Kubernetes adapter
-Status: planned
+Status: complete
 Owner: Riya, Shriya, Akil
-Evidence: not started
-Commit/PR: none
-Remaining work: admit only after repeatable C4/C5 and a disposable cluster are available
-Dependencies: stable C4 and C5
-Blockers: Kubernetes is outside MVP delivery
+Evidence: Implemented: Kubernetes admission evaluated and adapter verification recorded. Fresh `KUBERNETES_C7_INTEGRATION=1 npx vitest run .worktrees/feat-kubernetes-adapter/packages/scheduler/src/kubernetes-kind.integration.test.ts` passed (2 tests): concrete discovery and real Kind search -> minimization -> target artifact -> replay; fixture namespace cleanup succeeded.
+Commit/PR: feat/kubernetes-adapter
+Remaining work: none
+Dependencies: ready
+Blockers: none
 Next checkpoint: none

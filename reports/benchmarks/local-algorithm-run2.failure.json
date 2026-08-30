@@ -1,0 +1,92 @@
+{
+  "version": 2,
+  "createdAt": "2026-08-30T11:39:34.074Z",
+  "target": {
+    "platform": "local-process",
+    "manifestPath": "/home/xtrmn8/dsrd-tests/dsrd-local-test/mvp-distributed/manifest.json"
+  },
+  "originalSchedule": {
+    "id": "quick-001",
+    "perturbations": [
+      {
+        "workloadId": "bootstrap",
+        "phase": "ready",
+        "delayMs": 2500
+      }
+    ]
+  },
+  "minimizedSchedule": {
+    "id": "quick-001-minimized",
+    "perturbations": [
+      {
+        "workloadId": "bootstrap",
+        "phase": "ready",
+        "delayMs": 2500
+      }
+    ]
+  },
+  "expectedFailureReason": "Dependency was not ready (unknown)",
+  "events": [
+    {
+      "timeMs": 2,
+      "service": "bootstrap",
+      "event": "process_started"
+    },
+    {
+      "timeMs": 4,
+      "service": "api",
+      "event": "process_started"
+    },
+    {
+      "timeMs": 5,
+      "service": "audit",
+      "event": "process_started"
+    },
+    {
+      "timeMs": 104,
+      "service": "api",
+      "event": "process_exited",
+      "detail": "exit code 1"
+    },
+    {
+      "timeMs": 104,
+      "service": "api",
+      "event": "workload_exited",
+      "detail": "exit code 1"
+    },
+    {
+      "timeMs": 569,
+      "service": "audit",
+      "event": "process_exited",
+      "detail": "exit code 1"
+    },
+    {
+      "timeMs": 569,
+      "service": "audit",
+      "event": "workload_exited",
+      "detail": "exit code 1"
+    },
+    {
+      "timeMs": 2558,
+      "service": "bootstrap",
+      "event": "process_exited",
+      "detail": "exit code 0"
+    },
+    {
+      "timeMs": 2558,
+      "service": "bootstrap",
+      "event": "workload_exited",
+      "detail": "exit code 0"
+    },
+    {
+      "timeMs": 2558,
+      "service": "unknown",
+      "event": "log_dependency_not_ready"
+    },
+    {
+      "timeMs": 2559,
+      "service": "unknown",
+      "event": "log_dependency_not_ready"
+    }
+  ]
+}

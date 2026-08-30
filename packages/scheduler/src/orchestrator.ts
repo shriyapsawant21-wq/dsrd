@@ -7,15 +7,18 @@ import type {
 } from "@dsrd/contracts";
 
 import { createFailureArtifact } from "./artifact.js";
+import type { CandidateStage } from "./candidates.js";
 import { minimizeSchedule } from "./minimize.js";
-import { searchSchedules, type RunSchedule } from "./search.js";
+import { searchCandidateStages, searchSchedules, type RunSchedule, type SearchOptions } from "./search.js";
 
 export type DiscoverFailureOptions = {
-  candidates: readonly Schedule[];
+  candidates?: readonly Schedule[];
+  candidateStages?: readonly CandidateStage[];
   delayOptionsMs: readonly number[];
   target: TargetConfig;
   createdAt?: string;
   runSchedule: RunSchedule;
+  maxSchedules?: number;
 };
 
 export type DiscoveryResult =
@@ -37,15 +40,26 @@ export type ReplayResult = {
 export async function discoverFailure(
   options: DiscoverFailureOptions
 ): Promise<DiscoveryResult> {
-  const searchResult = await searchSchedules(options.candidates, options.target, options.runSchedule);
+  let executions = 0;
+  const runSchedule = async (target: TargetConfig, schedule: Schedule): Promise<RunResult> => {
+    if (options.maxSchedules !== undefined && executions >= options.maxSchedules) {
+      throw new Error("Maximum schedule execution budget exhausted");
+    }
+    executions += 1;
+    return options.runSchedule(target, schedule);
+  };
+  const searchOptions: SearchOptions = { maxSchedules: options.maxSchedules };
+  const searchResult = options.candidateStages !== undefined
+    ? await searchCandidateStages(options.candidateStages, options.target, runSchedule, searchOptions)
+    : await searchSchedules(options.candidates ?? [], options.target, runSchedule, searchOptions);
   if (searchResult.status === "no_failure") {
     return searchResult;
   }
 
   const runReproducibly: RunSchedule = async (target, schedule) => {
-    const first = await options.runSchedule(target, schedule);
+    const first = await runSchedule(target, schedule);
     if (first.status !== "fail") return first;
-    return options.runSchedule(target, schedule);
+    return runSchedule(target, schedule);
   };
   const minimizedSchedule = await minimizeSchedule(
     searchResult.failingSchedule,

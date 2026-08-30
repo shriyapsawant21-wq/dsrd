@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dsrd-kubernetes-race
+  labels:
+    dsrd.infrastructure: namespace
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: dsrd-kubernetes-race
+  labels:
+    dsrd.workload: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+        dsrd.workload: api
+    spec:
+      containers:
+        - name: api
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep 300"]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: database
+  namespace: dsrd-kubernetes-race
+  labels:
+    dsrd.workload: database
+spec:
+  serviceName: database
+  replicas: 1
+  selector:
+    matchLabels:
+      app: database
+  template:
+    metadata:
+      labels:
+        app: database
+        dsrd.workload: database
+    spec:
+      containers:
+        - name: database
+          image: busybox:1.36
+          command: ["sh", "-c", "nc -lk -p 5432"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: database
+  namespace: dsrd-kubernetes-race
+  labels:
+    dsrd.workload: database
+spec:
+  selector:
+    app: database
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  namespace: dsrd-kubernetes-race
+  labels:
+    dsrd.workload: migrate
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        dsrd.workload: migrate
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: busybox:1.36
+          command: ["sh", "-c", "for i in 1 2 3 4 5; do nc -z database 5432 && exit 0; sleep 0.2; done; echo dependency unavailable; exit 1"]
