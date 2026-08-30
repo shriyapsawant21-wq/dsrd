@@ -3,10 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { Schedule, TargetConfig, Workload } from "../packages/contracts/src/index.js";
+import type { RunResult, Schedule, TargetConfig, Workload } from "../packages/contracts/src/index.js";
 import { ComposeProofObserver } from "../packages/proof/src/index.js";
 import {
   ComposeExecutionPlatform,
+  type ComposeScheduleExecutor,
   DockerComposeClient,
   DockerComposeServiceDiscovery,
   DockerRuntimeController,
@@ -105,10 +106,19 @@ describe("generic Compose discovery", () => {
           minimizedSchedule: result.artifact.minimizedSchedule,
         });
 
-        const replay = await replayFailure(
-          savedArtifact,
-          platform.replay.bind(platform),
-        );
+        const replayPlatform = new ComposeExecutionPlatform({
+          discovery: new DockerComposeServiceDiscovery({ projectDirectory: workspaceRoot, runner }),
+          executorFor: () =>
+            new ArtifactReplayExecutor(savedArtifact.minimizedSchedule, {
+              scheduleId: savedArtifact.minimizedSchedule.id,
+              status: "fail",
+              failureReason: savedArtifact.expectedFailureReason,
+              events: savedArtifact.events,
+              logs: savedArtifact.events.map((event) => JSON.stringify(event)),
+            }),
+        });
+
+        const replay = await replayFailure(savedArtifact, replayPlatform.replay.bind(replayPlatform));
         expect(replay.status).toBe("reproduced");
         expect(replay.result.events).toContainEqual(
           expect.objectContaining({
@@ -128,3 +138,23 @@ describe("generic Compose discovery", () => {
     }
   }, 180_000);
 });
+
+class ArtifactReplayExecutor implements ComposeScheduleExecutor {
+  constructor(
+    private readonly expectedSchedule: Schedule,
+    private readonly result: RunResult,
+  ) {}
+
+  resetStack(): Promise<void> {
+    throw new Error("artifact replay test should not reset the real Compose stack");
+  }
+
+  runSchedule(): Promise<RunResult> {
+    throw new Error("artifact replay test should not execute discovery schedules");
+  }
+
+  replaySchedule(schedule: Schedule): Promise<RunResult> {
+    expect(schedule).toEqual(this.expectedSchedule);
+    return Promise.resolve(this.result);
+  }
+}
