@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { createRun, subscribeRun, type Progress } from "./api.js";
+import { createRun, detectProjectPlatforms, subscribeRun, type Progress } from "./api.js";
 
 class FakeEventSource {
   static latest: FakeEventSource | undefined;
@@ -41,6 +41,15 @@ it("posts folder files with their browser-relative paths", async () => {
   const form = fetchMock.mock.calls[0][1].body as FormData;
   expect(form.get("relativePaths")).toBe(JSON.stringify(["demo/compose.yaml"]));
   expect(form.getAll("projectFiles")).toHaveLength(1);
+});
+
+it("detects local and Docker targets from selected project files", () => {
+  const manifest = new File(["{}"], "manifest.json");
+  const compose = new File(["services: {}"], "compose.yaml");
+
+  expect(detectProjectPlatforms([manifest])).toEqual(["local-process"]);
+  expect(detectProjectPlatforms([compose])).toEqual(["compose"]);
+  expect(detectProjectPlatforms([manifest, compose])).toEqual(["local-process", "compose"]);
 });
 
 it("shows a stable upload error when the API returns an empty error response", async () => {

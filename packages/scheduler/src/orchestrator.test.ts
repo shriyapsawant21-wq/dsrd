@@ -41,6 +41,39 @@ describe("orchestration", () => {
     });
   });
 
+  it("keeps the reproducible schedule when a smaller candidate fails only once", async () => {
+    const original: Schedule = {
+      id: "schedule-001",
+      perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }]
+    };
+    let lowerDelayRuns = 0;
+    const resultFor = (schedule: Schedule, fails: boolean): RunResult => ({
+      scheduleId: schedule.id,
+      status: fails ? "fail" : "pass",
+      events: [],
+      logs: []
+    });
+
+    const result = await discoverFailure({
+      candidates: [{ id: "schedule-000", perturbations: [] }, original],
+      delayOptionsMs: [0, 500, 1000],
+      target,
+      runSchedule: async (_target, schedule) => {
+        const delay = schedule.perturbations[0]?.delayMs ?? 0;
+        if (delay === 500) {
+          lowerDelayRuns += 1;
+          return resultFor(schedule, lowerDelayRuns === 1);
+        }
+        return resultFor(schedule, delay === 1000);
+      }
+    });
+
+    expect(result).toMatchObject({
+      status: "found_failure",
+      artifact: { minimizedSchedule: { perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }] } }
+    });
+  });
+
   it("uses the injected replay function for the artifact target and minimized schedule", async () => {
     const artifact = {
       version: 2 as const,

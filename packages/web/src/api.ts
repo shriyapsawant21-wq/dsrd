@@ -5,12 +5,22 @@ export type TimelineEvent = { timeMs: number; service: string; event: string; de
 export type FailureDetail = { id: string; reason: string; severity: string; events: TimelineEvent[]; originalSchedule: unknown; minimizedSchedule: unknown };
 
 type FolderFile = File & { webkitRelativePath?: string };
+export type ProjectPlatform = "compose" | "local-process";
 
-export async function createRun(files: Iterable<File>): Promise<{ runId: string }> {
+export function detectProjectPlatforms(files: Iterable<File>): ProjectPlatform[] {
+  const names = [...files].map((file) => ((file as FolderFile).webkitRelativePath || file.name).split(/[\\/]/).at(-1)?.toLowerCase());
+  const platforms: ProjectPlatform[] = [];
+  if (names.includes("manifest.json")) platforms.push("local-process");
+  if (names.some((name) => name === "compose.yaml" || name === "compose.yml" || name === "docker-compose.yaml" || name === "docker-compose.yml")) platforms.push("compose");
+  return platforms;
+}
+
+export async function createRun(files: Iterable<File>, platform?: ProjectPlatform): Promise<{ runId: string }> {
   const selected = [...files];
   const paths = selected.map((file) => (file as FolderFile).webkitRelativePath || file.name);
   const body = new FormData();
   body.append("relativePaths", JSON.stringify(paths));
+  if (platform) body.append("platform", platform);
   selected.forEach((file) => body.append("projectFiles", file));
   const response = await fetch("/api/runs", { method: "POST", body });
   if (!response.ok) {

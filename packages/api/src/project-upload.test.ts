@@ -62,3 +62,13 @@ it("rejects folders with both Compose and local-process targets", async () => {
     )
   ).rejects.toThrow("Multiple project targets found");
 });
+
+it("uses the requested local target when a folder contains both target files", async () => {
+  const project = await materializeProject(
+    [uploadedFile("services: {}"), uploadedFile('{"workloads": []}')],
+    JSON.stringify(["compose.yaml", "manifest.json"]),
+    "local-process"
+  );
+  createdDirectories.push(project.projectDirectory);
+  expect(project.target).toMatchObject({ platform: "local-process", manifestPath: expect.stringMatching(/manifest\.json$/) });
+});

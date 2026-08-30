@@ -56,15 +56,20 @@ export async function discoverFailure(
     return searchResult;
   }
 
+  const runReproducibly: RunSchedule = async (target, schedule) => {
+    const first = await runSchedule(target, schedule);
+    if (first.status !== "fail") return first;
+    return runSchedule(target, schedule);
+  };
   const minimizedSchedule = await minimizeSchedule(
     searchResult.failingSchedule,
     options.target,
-    runSchedule,
+    runReproducibly,
     options.delayOptionsMs
   );
-  const minimizedRun = await runSchedule(options.target, minimizedSchedule);
+  const minimizedRun = await runReproducibly(options.target, minimizedSchedule);
   if (minimizedRun.status !== "fail") {
-    throw new Error("Minimization produced a schedule that did not reproduce the failure");
+    return { status: "no_failure", testedSchedules: searchResult.testedSchedules };
   }
 
   return {
