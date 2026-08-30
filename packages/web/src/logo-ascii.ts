@@ -2,6 +2,10 @@ export function canShowAsciiLogo(scrollY: number): boolean {
   return scrollY <= 0;
 }
 
+export function shouldShowAsciiBackdrop(screen: string, showScrollCue: boolean): boolean {
+  return screen === "exploring" || screen === "report" || screen === "detail" || (screen === "landing" && !showScrollCue);
+}
+
 export const ASCII_STROKE_WIDTH = 0.9;
 
 export function shouldClearAsciiReveal(lastMovementAt: number, now: number, idleMs = 100, fadeMs = 180): boolean {
@@ -51,14 +55,32 @@ export function mergeParallelOutlineSegments(segments: OutlineSegment[]): Outlin
   return groups.map((group) => ({ orientation: group.orientation, start: Math.round(group.starts.reduce((sum, value) => sum + value, 0) / group.starts.length), end: Math.round(group.ends.reduce((sum, value) => sum + value, 0) / group.ends.length), axis: group.firstAxis, thickness: group.lastAxis - group.firstAxis + 1 }));
 }
 
-export type LogoGlyph = { x: number; y: number; character: string };
+export type LogoGlyph = { x: number; y: number; character: string; color?: string };
 export type VelocityRevealShape = { directionX: number; directionY: number; stretch: number };
 export type AsciiBackdropPalette = { color: string; baseAlpha: number; trailAlpha: number };
+const LOGO_MAGENTA = "#ec0372";
+
+export function getAsciiAccentColor(_theme: "dark" | "light"): string {
+  return LOGO_MAGENTA;
+}
+
+export function getAsciiGlyphColor(pixels: Uint8ClampedArray, width: number, centerX: number, centerY: number, radius: number): string {
+  const height = pixels.length / 4 / width;
+  let red = 0; let green = 0; let blue = 0; let count = 0;
+  for (let y = Math.max(0, Math.floor(centerY - radius)); y <= Math.min(height - 1, Math.ceil(centerY + radius)); y++) {
+    for (let x = Math.max(0, Math.floor(centerX - radius)); x <= Math.min(width - 1, Math.ceil(centerX + radius)); x++) {
+      const index = (y * width + x) * 4;
+      if (pixels[index + 3] <= 80) continue;
+      red += pixels[index]; green += pixels[index + 1]; blue += pixels[index + 2]; count++;
+    }
+  }
+  return count > 0 ? `rgb(${Math.round(red / count)} ${Math.round(green / count)} ${Math.round(blue / count)})` : LOGO_MAGENTA;
+}
 
 export function getAsciiBackdropPalette(theme: "dark" | "light"): AsciiBackdropPalette {
   return theme === "light"
-    ? { color: "#d40070", baseAlpha: 0.025, trailAlpha: 0.07 }
-    : { color: "#ff1593", baseAlpha: 0.02, trailAlpha: 0.075 };
+    ? { color: getAsciiAccentColor(theme), baseAlpha: 0.025, trailAlpha: 0.07 }
+    : { color: getAsciiAccentColor(theme), baseAlpha: 0.02, trailAlpha: 0.075 };
 }
 
 export function createBackdropGlyphs(width: number, height: number, step: number): LogoGlyph[] {

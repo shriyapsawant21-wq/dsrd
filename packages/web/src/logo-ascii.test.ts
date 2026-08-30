@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { ASCII_STROKE_WIDTH, canShowAsciiLogo, createBackdropGlyphs, findStraightOutlineSegments, getActiveTrailSamples, getAsciiBackdropPalette, getIrregularRevealRadius, getRevealedGlyphs, getShrinkingRevealRadius, getVelocityRevealShape, hasOpaquePixelInCell, isOutlinePixel, mergeParallelOutlineSegments, shouldClearAsciiReveal } from "./logo-ascii";
+import { ASCII_STROKE_WIDTH, canShowAsciiLogo, createBackdropGlyphs, findStraightOutlineSegments, getActiveTrailSamples, getAsciiAccentColor, getAsciiBackdropPalette, getAsciiGlyphColor, getIrregularRevealRadius, getRevealedGlyphs, getShrinkingRevealRadius, getVelocityRevealShape, hasOpaquePixelInCell, isOutlinePixel, mergeParallelOutlineSegments, shouldClearAsciiReveal, shouldShowAsciiBackdrop } from "./logo-ascii";
 
 describe("ASCII logo state", () => {
+  it("shows the ambient backdrop only on active upload and run result screens", () => {
+    expect(shouldShowAsciiBackdrop?.("landing", true)).toBe(false);
+    expect(shouldShowAsciiBackdrop?.("landing", false)).toBe(true);
+    expect(shouldShowAsciiBackdrop?.("exploring", true)).toBe(true);
+    expect(shouldShowAsciiBackdrop?.("report", true)).toBe(true);
+    expect(shouldShowAsciiBackdrop?.("detail", true)).toBe(true);
+    expect(shouldShowAsciiBackdrop?.("no_failure", false)).toBe(false);
+  });
+
   it("allows the hover artwork only while the landing logo is at rest", () => {
     expect(canShowAsciiLogo(0)).toBe(true);
     expect(canShowAsciiLogo(1)).toBe(false);
@@ -75,9 +84,23 @@ describe("ASCII logo state", () => {
   it("keeps the ambient ASCII field below the low-opacity budget in both themes", () => {
     for (const theme of ["dark", "light"] as const) {
       const palette = getAsciiBackdropPalette?.(theme);
+      expect(palette?.color).toBe("#ec0372");
       expect(palette?.baseAlpha).toBeLessThanOrEqual(0.03);
       expect(palette?.trailAlpha).toBeLessThanOrEqual(0.08);
     }
+  });
+
+  it("uses the logo magenta for every ASCII theme", () => {
+    expect(getAsciiAccentColor?.("dark")).toBe("#ec0372");
+    expect(getAsciiAccentColor?.("light")).toBe("#ec0372");
+  });
+
+  it("samples each glyph color from its underlying logo pixels", () => {
+    const pixels = new Uint8ClampedArray(4 * 4 * 4);
+    const index = (1 * 4 + 1) * 4;
+    pixels.set([236, 3, 114, 255], index);
+    expect(getAsciiGlyphColor?.(pixels, 4, 1, 1, 1)).toBe("rgb(236 3 114)");
+    expect(getAsciiGlyphColor?.(pixels, 4, 3, 3, 0)).toBe("#ec0372");
   });
 
   it("fills the viewport with deterministic ASCII cells", () => {

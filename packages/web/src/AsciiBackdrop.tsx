@@ -14,7 +14,7 @@ import type { Theme } from "./theme";
 const glyphStep = 25;
 const revealRadius = 90;
 const trailDurationMs = 650;
-const fontStack = '"JetBrains Mono", "Fira Code", "Terminus", monospace';
+const fontStack = '"IBM Plex Mono", monospace';
 
 type TrailSample = {
   x: number;

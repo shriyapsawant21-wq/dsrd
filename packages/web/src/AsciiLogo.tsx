@@ -4,7 +4,7 @@ import {
   getActiveTrailSamples,
   getRevealedGlyphs,
   getShrinkingRevealRadius,
-  getVelocityRevealShape,
+  getVelocityRevealShape, getAsciiAccentColor, getAsciiGlyphColor,
   hasOpaquePixelInCell,
   type LogoGlyph,
   type VelocityRevealShape,
@@ -43,19 +43,20 @@ export const AsciiLogo = forwardRef<HTMLDivElement, { enabled: boolean; theme: T
       const active = getActiveTrailSamples(trail.current, now, trailDurationMs);
       trail.current = active;
       context.clearRect(0, 0, canvasSize, canvasSize);
-      context.font = `900 ${glyphStep + 2}px "JetBrains Mono", "Fira Code", "Terminus", monospace`;
+      context.font = `700 ${glyphStep + 2}px "IBM Plex Mono", monospace`;
       context.textBaseline = "middle";
       context.lineWidth = ASCII_STROKE_WIDTH;
 
       const surface = theme === "light" ? "#ffdbea" : "#030303";
-      const accent = theme === "light" ? "#d40070" : "#ff1593";
+      const accent = getAsciiAccentColor(theme);
       for (const sample of active) {
         const radius = getShrinkingRevealRadius(revealRadius, now - sample.createdAt, trailDurationMs);
         for (const glyph of getRevealedGlyphs(logoGlyphs.current, sample, radius, sample.shape)) {
           context.fillStyle = surface;
           context.fillRect(glyph.x - glyphStep / 2 - 1, glyph.y - glyphStep / 2 - 1, glyphStep + 2, glyphStep + 2);
-          context.fillStyle = accent;
-          context.strokeStyle = accent;
+          const glyphAccent = glyph.color ?? accent;
+          context.fillStyle = glyphAccent;
+          context.strokeStyle = glyphAccent;
           context.strokeText(glyph.character, glyph.x - glyphStep / 2, glyph.y);
           context.fillText(glyph.character, glyph.x - glyphStep / 2, glyph.y);
         }
@@ -95,7 +96,7 @@ export const AsciiLogo = forwardRef<HTMLDivElement, { enabled: boolean; theme: T
       for (let y = glyphStep / 2; y < canvasSize; y += glyphStep) {
         for (let x = glyphStep / 2; x < canvasSize; x += glyphStep) {
           if (hasOpaquePixelInCell(pixels, canvasSize, x - glyphStep / 2, y - glyphStep / 2, glyphStep)) {
-            next.push({ x, y, character: glyphs[(x * 3 + y * 5) % glyphs.length] });
+            next.push({ x, y, character: glyphs[(x * 3 + y * 5) % glyphs.length], color: getAsciiGlyphColor(pixels, canvasSize, x, y, glyphStep / 2) });
           }
         }
       }

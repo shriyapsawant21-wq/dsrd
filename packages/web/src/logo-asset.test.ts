@@ -49,8 +49,8 @@ describe("logo asset", () => {
     for (let index = 0; index < pixels.length; index += 4) {
       const [red, green, blue, alpha] = pixels.subarray(index, index + 4);
       const hiddenWhite = alpha === 0 && red > 220 && green > 220 && blue > 220;
-      const visibleWhite = alpha > 0 && Math.max(red, green, blue) - Math.min(red, green, blue) < 35 && red > 180;
-      if (hiddenWhite || visibleWhite) whiteArtifacts++;
+        const visiblePaleFringe = alpha > 0 && green > 45;
+      if (hiddenWhite || visiblePaleFringe) whiteArtifacts++;
     }
     expect(whiteArtifacts).toBe(0);
   });
