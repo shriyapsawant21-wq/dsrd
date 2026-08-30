@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { loadFailureArtifact, saveFailureArtifact } from "./artifact.js";
-import { generateCandidates, generateFocusedCandidates } from "./candidates.js";
+import { generateAdaptiveCandidateStages, generateFocusedCandidates } from "./candidates.js";
 import { fakePlatform } from "./fake-platform.js";
 import { discoverFailure, replayFailure } from "./orchestrator.js";
 import { chooseMenuAction, createReadlinePrompt, type PromptAdapter } from "./prompt.js";
@@ -82,16 +82,18 @@ export async function runCli(
     .option("-t, --target <path>", "project directory containing the target manifest", ".")
     .option("-d, --delay-options <milliseconds>", "comma-separated delay values")
     .option("--quick", "test one perturbation at a time with a small delay set")
+    .option("-n, --max-runs <number>", "maximum physical schedule executions")
     .option("-o, --output <path>", "artifact output path", "failure.json")
-    .action(async (options: { platform: string; target: string; delayOptions?: string; quick?: boolean; output: string }) => {
+    .action(async (options: { platform: string; target: string; delayOptions?: string; quick?: boolean; maxRuns?: string; output: string }) => {
       const delayOptionsMs = options.delayOptions
         ? parseDelayOptions(options.delayOptions)
         : options.quick ? quickDelayOptionsMs : defaultDelayOptionsMs;
       const target = targetConfig(options.platform, await resolveTargetPath(options.platform, options.target));
       const workloads = await dependencies.platform.discover(target);
-      const candidates = options.quick
-        ? generateFocusedCandidates(workloads, delayOptionsMs)
-        : generateCandidates(workloads, delayOptionsMs);
+      const candidates = options.quick ? generateFocusedCandidates(workloads, delayOptionsMs) : undefined;
+      const candidateStages = options.quick ? undefined : generateAdaptiveCandidateStages(workloads, delayOptionsMs);
+      const candidateMaximum = candidates?.length ?? candidateStages?.at(-1)?.candidateCount ?? 0;
+      const maxRuns = options.maxRuns === undefined ? undefined : parseMaxRuns(options.maxRuns);
       let runNumber = 0;
       let failureFound = false;
       const runWithProgress = async (runTarget: TargetConfig, schedule: Parameters<typeof runSchedule>[1]) => {
@@ -105,14 +107,16 @@ export async function runCli(
         return runResult;
       };
       dependencies.log(options.quick
-        ? `Starting quick scan (${candidates.length} schedules maximum).`
-        : `Starting thorough scan (${candidates.length} schedules maximum).`);
+        ? `Starting quick scan (${Math.min(maxRuns ?? candidateMaximum, candidateMaximum)} schedules maximum).`
+        : `Starting adaptive thorough scan (${Math.min(maxRuns ?? candidateMaximum, candidateMaximum)} schedules maximum).`);
       dependencies.log("");
       const result = await discoverFailure({
         candidates,
+        candidateStages,
         delayOptionsMs,
         target,
-        runSchedule: runWithProgress
+        runSchedule: runWithProgress,
+        maxSchedules: maxRuns,
       });
 
       if (result.status === "no_failure") {
@@ -137,7 +141,7 @@ export async function runCli(
           failureReason: result.artifact.expectedFailureReason,
           events: result.artifact.events,
           useColor: dependencies.useColor,
-          scope: { workloads: workloads.length, dimensions, candidates: candidates.length },
+          scope: { workloads: workloads.length, dimensions, candidates: candidateMaximum },
           exploredSchedules: result.testedSchedules,
           originalPerturbations: result.artifact.originalSchedule.perturbations.length
         })
@@ -278,4 +282,12 @@ function parseDelayOptions(input: string): number[] {
     throw new Error("Delay options must be comma-separated non-negative numbers");
   }
   return values;
+}
+
+function parseMaxRuns(input: string): number {
+  const value = Number(input);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error("Maximum runs must be a positive integer");
+  }
+  return value;
 }
