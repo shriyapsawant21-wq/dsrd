@@ -208,4 +208,3 @@ Expected: Vite reports `http://127.0.0.1:5173`, Electron opens the DSRD UI, and 
 git add package.json README.md packages/desktop
 git commit -m feat-desktop-dev-command
 ```
-
