@@ -8,6 +8,7 @@ import {
   type Delay,
   type ObservationSnapshot,
   type ReadinessDelayAdapter,
+  type StartDelayGate,
   type RunObserver
 } from "../src/index.js";
 
@@ -177,6 +178,23 @@ class RecordingReadinessDelay implements ReadinessDelayAdapter {
   }
 }
 
+class RecordingStartDelayGate implements StartDelayGate {
+  private releaseGate?: () => void;
+
+  constructor(private readonly actions: string[]) {}
+
+  async wait(service: string): Promise<void> {
+    this.actions.push(`gate:${service}`);
+    await new Promise<void>((resolve) => {
+      this.releaseGate = resolve;
+    });
+  }
+
+  release(): void {
+    this.releaseGate?.();
+  }
+}
+
 const schedule: Schedule = {
   id: "schedule-1",
   perturbations: [
@@ -236,6 +254,41 @@ describe("DockerRuntimeController", () => {
 
     delay.release();
     await run;
+  });
+
+  it("waits for the start-delay gate before applying a delayed service timer", async () => {
+    const compose = new RecordingCompose();
+    const gate = new RecordingStartDelayGate(compose.actions);
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer: new RecordingObserver(),
+      startDelayGate: gate,
+    });
+
+    const run = controller.runSchedule({
+      id: "gated-postgres",
+      perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
+    }, ["postgres", "api"]);
+
+    await vi.waitFor(() => {
+      expect(compose.actions).toContain("start:api");
+    });
+    expect(compose.actions).toEqual(["reset", "gate:postgres", "wait:0", "start:api"]);
+
+    gate.release();
+    await run;
+    expect(compose.actions).toEqual([
+      "reset",
+      "gate:postgres",
+      "wait:0",
+      "start:api",
+      "wait:100",
+      "start:postgres",
+      "logs",
+      "ps",
+      "stop",
+    ]);
   });
 
   it("cancels a delayed independent start when a sibling start fails", async () => {

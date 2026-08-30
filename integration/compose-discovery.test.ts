@@ -12,6 +12,7 @@ import {
   DockerRuntimeController,
   NodeCommandRunner,
   SystemDelay,
+  type StartDelayGate,
 } from "../packages/runtime/src/index.js";
 import {
   loadFailureArtifact,
@@ -28,13 +29,31 @@ const target: TargetConfig = {
   platform: "compose",
   composeFile: "fixtures/startup-race/compose.yaml",
 };
-const replaySafePostgresDelayMs = 15_000;
+const postgresDelayAfterApiAttemptMs = 2_500;
 const runner = new NodeCommandRunner();
 const compose = new DockerComposeClient({
   projectDirectory: workspaceRoot,
   composeFile: target.composeFile,
   runner,
 });
+
+class ApiDatabaseAttemptGate implements StartDelayGate {
+  async wait(service: string, signal: AbortSignal): Promise<void> {
+    if (service !== "postgres") return;
+
+    while (true) {
+      signal.throwIfAborted();
+      const logs = await compose.collectLogs();
+      if (logs.some((line) =>
+        line.includes('"service":"api"') &&
+        line.includes('"event":"db_connection_attempted"')
+      )) {
+        return;
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    }
+  }
+}
 
 describe("generic Compose discovery", () => {
   afterAll(async () => {
@@ -47,6 +66,7 @@ describe("generic Compose discovery", () => {
       compose,
       delay: new SystemDelay(),
       observer: new ComposeProofObserver(() => workloads),
+      startDelayGate: new ApiDatabaseAttemptGate(),
       runTimeoutMs: 45_000,
     });
     const platform = new ComposeExecutionPlatform({
@@ -65,11 +85,11 @@ describe("generic Compose discovery", () => {
         {
           id: "delay-postgres-start",
           perturbations: [
-            { workloadId: "postgres", phase: "start", delayMs: replaySafePostgresDelayMs },
+            { workloadId: "postgres", phase: "start", delayMs: postgresDelayAfterApiAttemptMs },
           ],
         },
       ],
-      delayOptionsMs: [0, replaySafePostgresDelayMs],
+      delayOptionsMs: [0, postgresDelayAfterApiAttemptMs],
       runSchedule: platform.run.bind(platform),
       createdAt: "2026-08-30T00:00:00.000Z",
     });
@@ -79,11 +99,11 @@ describe("generic Compose discovery", () => {
       expect(result.artifact.originalSchedule).toEqual({
         id: "delay-postgres-start",
         perturbations: [
-          { workloadId: "postgres", phase: "start", delayMs: replaySafePostgresDelayMs },
+          { workloadId: "postgres", phase: "start", delayMs: postgresDelayAfterApiAttemptMs },
         ],
       });
       expect(result.artifact.minimizedSchedule.perturbations).toEqual([
-        { workloadId: "postgres", phase: "start", delayMs: replaySafePostgresDelayMs },
+        { workloadId: "postgres", phase: "start", delayMs: postgresDelayAfterApiAttemptMs },
       ]);
       expect(result.artifact.minimizedSchedule.perturbations.length).toBeLessThanOrEqual(
         result.artifact.originalSchedule.perturbations.length,

@@ -8,6 +8,7 @@ import type {
   RunObserver
 } from "./observer.js";
 import type { ReadinessDelayAdapter } from "./readiness-delay.js";
+import type { StartDelayGate } from "./start-delay-gate.js";
 
 export interface ComposeRuntime {
   resetStack(): Promise<void>;
@@ -25,6 +26,7 @@ export type DockerRuntimeControllerOptions = {
   delay: Delay;
   observer: RunObserver;
   readinessDelay?: ReadinessDelayAdapter;
+  startDelayGate?: StartDelayGate;
   runTimeoutMs?: number;
 };
 
@@ -182,7 +184,11 @@ export class DockerRuntimeController {
       signal.addEventListener("abort", cancelForRunAbort, { once: true });
     }
     const starts = serviceOrder.map(async (service) => {
-      await this.waitForDelay(startDelays.get(service) ?? 0, cancellation.signal);
+      const delayMs = startDelays.get(service) ?? 0;
+      if (delayMs > 0 && this.options.startDelayGate !== undefined) {
+        await this.options.startDelayGate.wait(service, cancellation.signal);
+      }
+      await this.waitForDelay(delayMs, cancellation.signal);
       cancellation.signal.throwIfAborted();
       await this.options.compose.startService(service, {
         includeDependencies: false,

@@ -6,3 +6,4 @@ export * from "./compose-platform.js";
 export * from "./observer.js";
 export * from "./readiness-delay.js";
 export * from "./runtime-controller.js";
+export * from "./start-delay-gate.js";
