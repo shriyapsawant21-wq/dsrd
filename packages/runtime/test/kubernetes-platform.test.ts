@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   KubernetesExecutionPlatform,
+  KubectlKubernetesExecutor,
+  type CommandInvocation,
+  type CommandResult,
+  type CommandRunner,
   type KubernetesResourceDiscovery,
   type KubernetesScheduleExecutor,
 } from "../src/index.js";
@@ -79,6 +83,38 @@ describe("KubernetesExecutionPlatform", () => {
     expect(executor.runs).toEqual([
       { id: "delayed-api", workloads: ["api", "postgres", "migrate"] },
       { id: "replay:delayed-api", workloads: ["api", "postgres", "migrate"] },
+    ]);
+  });
+});
+
+class RecordingRunner implements CommandRunner {
+  readonly invocations: CommandInvocation[] = [];
+
+  async run(invocation: CommandInvocation): Promise<CommandResult> {
+    this.invocations.push(invocation);
+    return { stdout: "", stderr: "", exitCode: 0 };
+  }
+}
+
+describe("KubectlKubernetesExecutor", () => {
+  it("resets manifest-scoped resources and applies scheduled workloads through kubectl", async () => {
+    const runner = new RecordingRunner();
+    const executor = new KubectlKubernetesExecutor({
+      target: { platform: "kubernetes", manifestPath: "fixture.yaml", namespace: "race-debugger" },
+      runner,
+      evaluate: async (scheduleId) => ({ scheduleId, status: "pass", events: [], logs: [] }),
+    });
+
+    await executor.resetNamespace();
+    await executor.runSchedule({
+      id: "delay-api",
+      perturbations: [{ workloadId: "api", phase: "start", delayMs: 1 }],
+    }, ["api", "postgres", "migrate"]);
+
+    expect(runner.invocations).toEqual([
+      { command: "kubectl", args: ["delete", "--ignore-not-found", "--wait=true", "-f", "fixture.yaml", "--namespace", "race-debugger"], cwd: process.cwd() },
+      { command: "kubectl", args: ["delete", "--ignore-not-found", "--wait=true", "-f", "fixture.yaml", "--namespace", "race-debugger"], cwd: process.cwd() },
+      { command: "kubectl", args: ["apply", "-f", "fixture.yaml", "--namespace", "race-debugger"], cwd: process.cwd() },
     ]);
   });
 });

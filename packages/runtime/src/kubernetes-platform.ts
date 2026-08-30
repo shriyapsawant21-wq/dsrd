@@ -6,6 +6,8 @@ import type {
   Workload,
 } from "@dsrd/contracts";
 
+import type { CommandRunner } from "./command-runner.js";
+
 export type KubernetesResourceDefinition = {
   name: string;
   kind: "Deployment" | "StatefulSet" | "Job";
@@ -20,6 +22,58 @@ export interface KubernetesScheduleExecutor {
   resetNamespace(): Promise<void>;
   runSchedule(schedule: Schedule, workloadOrder: string[]): Promise<RunResult>;
   replaySchedule(schedule: Schedule, workloadOrder: string[]): Promise<RunResult>;
+}
+
+export type KubectlKubernetesExecutorOptions = {
+  target: Extract<TargetConfig, { platform: "kubernetes" }>;
+  runner: CommandRunner;
+  evaluate(scheduleId: string): Promise<RunResult>;
+  cwd?: string;
+};
+
+/**
+ * A manifest-scoped Kubernetes lifecycle executor. It intentionally leaves
+ * failure classification to `evaluate`, so kubectl errors are execution
+ * errors rather than race discoveries.
+ */
+export class KubectlKubernetesExecutor implements KubernetesScheduleExecutor {
+  constructor(private readonly options: KubectlKubernetesExecutorOptions) {}
+
+  async resetNamespace(): Promise<void> {
+    await this.runKubectl([
+      "delete", "--ignore-not-found", "--wait=true", "-f", this.options.target.manifestPath,
+      ...this.namespaceArgs(),
+    ]);
+  }
+
+  async runSchedule(schedule: Schedule, _workloadOrder: string[]): Promise<RunResult> {
+    await this.resetNamespace();
+    const delayMs = Math.max(0, ...schedule.perturbations
+      .filter((perturbation) => perturbation.phase === "start")
+      .map((perturbation) => perturbation.delayMs));
+    if (delayMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    await this.runKubectl(["apply", "-f", this.options.target.manifestPath, ...this.namespaceArgs()]);
+    return this.options.evaluate(schedule.id);
+  }
+
+  async replaySchedule(schedule: Schedule, workloadOrder: string[]): Promise<RunResult> {
+    return this.runSchedule(schedule, workloadOrder);
+  }
+
+  private async runKubectl(args: string[]): Promise<void> {
+    const result = await this.options.runner.run({
+      command: "kubectl",
+      args,
+      cwd: this.options.cwd ?? process.cwd(),
+    });
+    if (result.exitCode !== 0) {
+      throw new Error(`kubectl ${args[0]} failed: ${result.stderr || `exit code ${result.exitCode}`}`);
+    }
+  }
+
+  private namespaceArgs(): string[] {
+    return this.options.target.namespace === undefined ? [] : ["--namespace", this.options.target.namespace];
+  }
 }
 
 export type KubernetesExecutionPlatformOptions = {
