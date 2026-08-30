@@ -59,16 +59,16 @@ export class DockerComposeClient {
     );
   }
 
-  async collectLogs(): Promise<string[]> {
-    const result = await this.runCompose(["logs", "--no-color"]);
+  async collectLogs(signal?: AbortSignal): Promise<string[]> {
+    const result = await this.runCompose(["logs", "--no-color"], signal);
     return result.stdout
       .split(/\r?\n/)
       .map((line) => line.trimEnd())
       .filter((line) => line.length > 0);
   }
 
-  async listServices(): Promise<ComposeServiceState[]> {
-    const result = await this.runCompose(["ps", "--all", "--format", "json"]);
+  async listServices(signal?: AbortSignal): Promise<ComposeServiceState[]> {
+    const result = await this.runCompose(["ps", "--all", "--format", "json"], signal);
     const output = result.stdout.trim();
     if (output.length === 0) {
       return [];

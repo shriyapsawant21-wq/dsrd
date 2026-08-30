@@ -140,6 +140,20 @@ describe("DockerComposeClient lifecycle", () => {
     expect(runner.calls[0]?.args).toEqual(["compose", "logs", "--no-color"]);
   });
 
+  it("forwards observation cancellation signals to Compose queries", async () => {
+    const runner = new RecordingRunner({ stdout: "", stderr: "", exitCode: 0 });
+    const client = new DockerComposeClient({ projectDirectory: "C:/fixture", runner });
+    const controller = new AbortController();
+
+    await client.collectLogs(controller.signal);
+    await client.listServices(controller.signal);
+
+    expect(runner.calls.map((call) => call.signal)).toEqual([
+      controller.signal,
+      controller.signal,
+    ]);
+  });
+
   it("parses Compose service metadata from JSON arrays", async () => {
     const runner = new RecordingRunner({
       stdout: JSON.stringify([

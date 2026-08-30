@@ -128,6 +128,24 @@ class BlockingLogsCompose extends RecordingCompose {
   }
 }
 
+class AbortableRefreshCompose extends RecordingCompose {
+  private logCalls = 0;
+  refreshSignal?: AbortSignal;
+
+  override async collectLogs(signal?: AbortSignal): Promise<string[]> {
+    this.actions.push("logs");
+    this.logCalls += 1;
+    if (this.logCalls === 1) {
+      return [];
+    }
+    this.refreshSignal = signal;
+    await new Promise<void>((_resolve, reject) => {
+      signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
+    return [];
+  }
+}
+
 class AbortableStartCompose extends RecordingCompose {
   override async startService(
     service: string,
@@ -362,6 +380,37 @@ describe("DockerRuntimeController", () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(compose.actions).not.toContain("ps");
     expect(observer.snapshot).toBeUndefined();
+  });
+
+  it("aborts an observer refresh before timeout cleanup", async () => {
+    vi.useFakeTimers();
+    const compose = new AbortableRefreshCompose();
+    const observer: RunObserver = {
+      evaluate: async (snapshot) => {
+        await snapshot.refresh?.();
+        return passingResult;
+      },
+    };
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer,
+      runTimeoutMs: 100,
+    });
+
+    const run = controller.runSchedule({ id: "refresh-stalled", perturbations: [] }, []);
+    const assertion = expect(run).rejects.toThrow(
+      "Schedule refresh-stalled timed out after 100ms",
+    );
+    await vi.advanceTimersByTimeAsync(100);
+
+    try {
+      await assertion;
+      expect(compose.refreshSignal?.aborted).toBe(true);
+      expect(compose.actions).toEqual(["reset", "logs", "ps", "logs", "stop"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("aborts an in-flight Compose start before timeout cleanup", async () => {

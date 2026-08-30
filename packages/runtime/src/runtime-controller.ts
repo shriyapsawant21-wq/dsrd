@@ -15,8 +15,8 @@ export interface ComposeRuntime {
     service: string,
     options?: { includeDependencies?: boolean; signal?: AbortSignal },
   ): Promise<void>;
-  collectLogs(): Promise<string[]>;
-  listServices(): Promise<ComposeServiceState[]>;
+  collectLogs(signal?: AbortSignal): Promise<string[]>;
+  listServices(signal?: AbortSignal): Promise<ComposeServiceState[]>;
   stopStack(): Promise<void>;
 }
 
@@ -142,9 +142,9 @@ export class DockerRuntimeController {
     }
 
     signal.throwIfAborted();
-    const logs = await this.options.compose.collectLogs();
+    const logs = await this.options.compose.collectLogs(signal);
     signal.throwIfAborted();
-    const services = await this.options.compose.listServices();
+    const services = await this.options.compose.listServices(signal);
     signal.throwIfAborted();
 
     const snapshot: ObservationSnapshot = {
@@ -161,10 +161,14 @@ export class DockerRuntimeController {
           detail: `${perturbation.delayMs}ms`,
         })),
       signal,
-      refresh: async () => ({
-        logs: await this.options.compose.collectLogs(),
-        services: await this.options.compose.listServices()
-      })
+      refresh: async () => {
+        signal.throwIfAborted();
+        const refreshedLogs = await this.options.compose.collectLogs(signal);
+        signal.throwIfAborted();
+        const refreshedServices = await this.options.compose.listServices(signal);
+        signal.throwIfAborted();
+        return { logs: refreshedLogs, services: refreshedServices };
+      }
     };
     return this.options.observer.evaluate(snapshot);
   }
