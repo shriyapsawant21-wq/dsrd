@@ -4,6 +4,7 @@ import { createRun, getFailure, getRun, subscribeRun, type FailureDetail, type P
 import { getLogoMotion } from "./logo-motion";
 import { getDemoFailureDetail, getReportFailures } from "./report-data";
 import { getInitialTheme, toggleTheme, type Theme } from "./theme";
+import { ScrollCue } from "./ScrollCue";
 
 type Screen = "landing" | "exploring" | "report" | "detail" | "no_failure" | "error";
 const initialProgress: Progress = { runId: "", phase: "queued", percentage: 0, message: "INITIALIZING", testedSchedules: 0, failureCount: 0 };
@@ -46,7 +47,7 @@ export default function App() {
     <header className="nav"><button className="brand" onClick={reset} aria-label="DSRD home">{screen !== "landing" && <img className="docked-logo" src="/dsrd-logo.png" alt=""/>}</button><div className="nav-icons"><Cpu size={15}/><Radio size={15}/><Terminal size={16}/><button className="theme-toggle" onClick={switchTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>{theme === "dark" ? <Sun size={17}/> : <Moon size={17}/>}</button></div></header>
     {screen === "landing" && <main>
       <img ref={movingLogo} src="/dsrd-logo.png" className="moving-logo" alt="DSRD"/>
-      <section className="hero" aria-hidden="true"/>
+      <section className="hero"><ScrollCue/></section>
       <section className="upload-section"><div className="section-title">[ INITIALIZE_SEQUENCE ]</div><button className={`drop-zone ${dragging ? "dragging" : ""}`} onClick={() => input.current?.click()} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); void start(e.dataTransfer.files[0]); }}><span className="corner">IN</span><Upload size={38} strokeWidth={2.4}/><strong>DRAG_AND_DROP_COMPOSE_FILE</strong><span>OR_CLICK_TO_BROWSE</span><small>SUPPORTED_FORMATS: .YAML, .YML</small></button><input ref={input} className="sr-only" aria-label="Compose file" type="file" accept=".yaml,.yml" onChange={(e) => void start(e.target.files?.[0])}/>{error && <p className="inline-error">{error}</p>}<p className="constraint">SELF-CONTAINED COMPOSE FILES ONLY // LOCAL BUILD CONTEXTS REQUIRE COMPANION FILE SUPPORT</p></section>
     </main>}
     {screen === "exploring" && <main className="screen exploring"><h1>EXPLORING<span className="blink">..._</span></h1><div className="progress-meta"><span>{progress.message}</span><span>{progress.percentage}%</span></div><div className="progress-track"><div style={{ width: `${progress.percentage}%` }}/></div><div className="system-row"><span>SYS_MEM: 0x7F8C4B</span><span>TESTED: {String(progress.testedSchedules).padStart(3,"0")}</span></div><div className="failure-count">FAILURES: {String(progress.failureCount).padStart(2,"0")}</div></main>}
