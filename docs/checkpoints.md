@@ -84,9 +84,9 @@ Next checkpoint: C7
 ## C7 — Kubernetes adapter
 Status: planned
 Owner: Riya, Shriya, Akil
-Evidence: not started
-Commit/PR: none
-Remaining work: admit only after repeatable C4/C5 and a disposable cluster are available
-Dependencies: stable C4 and C5
-Blockers: Kubernetes is outside MVP delivery
-Next checkpoint: none
+Evidence: Admission evaluated: C7 remains planned. The record has no explicit team admission, repeated C4/C5 reliability evidence, or disposable-cluster verification; no Kubernetes adapter work was started.
+Commit/PR: feat/kubernetes-adapter checkpoint handoff commit
+Remaining work: explicit team admission, repeated C4/C5 reliability evidence, and disposable-cluster verification.
+Dependencies: waiting on explicit team admission after repeatable C4/C5.
+Blockers: Kubernetes is future-only and outside MVP delivery until admission is recorded.
+Next checkpoint: C7
