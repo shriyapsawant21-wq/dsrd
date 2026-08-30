@@ -81,9 +81,10 @@ export async function runCli(
     .option("-p, --platform <platform>", "target platform", "local-process")
     .option("-t, --target <path>", "project directory containing the target manifest", ".")
     .option("-d, --delay-options <milliseconds>", "comma-separated delay values")
+    .option("-n, --max-runs <number>", "maximum candidate schedules to execute")
     .option("--quick", "test one perturbation at a time with a small delay set")
     .option("-o, --output <path>", "artifact output path", "failure.json")
-    .action(async (options: { platform: string; target: string; delayOptions?: string; quick?: boolean; output: string }) => {
+    .action(async (options: { platform: string; target: string; delayOptions?: string; quick?: boolean; maxRuns?: string; output: string }) => {
       const delayOptionsMs = options.delayOptions
         ? parseDelayOptions(options.delayOptions)
         : options.quick ? quickDelayOptionsMs : defaultDelayOptionsMs;
@@ -92,6 +93,7 @@ export async function runCli(
       const candidates = options.quick
         ? generateFocusedCandidates(workloads, delayOptionsMs)
         : generateCandidates(workloads, delayOptionsMs);
+      const maxSchedules = options.maxRuns === undefined ? undefined : parseMaxRuns(options.maxRuns);
       let runNumber = 0;
       let failureFound = false;
       const runWithProgress = async (runTarget: TargetConfig, schedule: Parameters<typeof runSchedule>[1]) => {
@@ -105,14 +107,15 @@ export async function runCli(
         return runResult;
       };
       dependencies.log(options.quick
-        ? `Starting quick scan (${candidates.length} schedules maximum).`
-        : `Starting thorough scan (${candidates.length} schedules maximum).`);
+        ? `Starting quick scan (${Math.min(maxSchedules ?? candidates.length, candidates.length)} schedules maximum).`
+        : `Starting thorough scan (${Math.min(maxSchedules ?? candidates.length, candidates.length)} schedules maximum).`);
       dependencies.log("");
       const result = await discoverFailure({
         candidates,
         delayOptionsMs,
         target,
-        runSchedule: runWithProgress
+        runSchedule: runWithProgress,
+        maxSchedules
       });
 
       if (result.status === "no_failure") {
@@ -278,4 +281,12 @@ function parseDelayOptions(input: string): number[] {
     throw new Error("Delay options must be comma-separated non-negative numbers");
   }
   return values;
+}
+
+function parseMaxRuns(input: string): number {
+  const value = Number(input.trim());
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error("Maximum runs must be a positive integer");
+  }
+  return value;
 }

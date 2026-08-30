@@ -36,6 +36,22 @@ describe("searchSchedules", () => {
 
     expect(result).toEqual({ status: "no_failure", testedSchedules: 3 });
   });
+
+  it("enforces a caller-provided candidate run budget", async () => {
+    const executed: string[] = [];
+    const result = await searchSchedules(
+      schedules,
+      target,
+      async (_target, schedule) => {
+        executed.push(schedule.id);
+        return runResult(schedule.id, "pass");
+      },
+      { maxSchedules: 2 },
+    );
+
+    expect(executed).toEqual(["schedule-000", "schedule-001"]);
+    expect(result).toEqual({ status: "no_failure", testedSchedules: 2 });
+  });
 });
 
 function runResult(scheduleId: string, status: RunResult["status"]): RunResult {

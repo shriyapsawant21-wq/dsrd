@@ -42,40 +42,43 @@ export function renderResultSummary(input: ResultSummaryInput): string {
     case "failure":
       const artifactPath = input.artifactPath ?? "failure.json";
       const summary = [
+        "╭─ ✿ RACE FOUND ✿ ─────────────────────────╮",
+        "",
         `Failure found after ${input.testedSchedules ?? 0} schedules.`,
-        `Saved replay artifact: ${artifactPath}`,
-        `Replay (PowerShell): race-debugger replay ${quotePowerShellArgument(artifactPath)}`,
-        `Replay (POSIX): race-debugger replay ${quotePosixArgument(artifactPath)}`
+        "├─ Artifact ─────────────────────────────────",
+        `  Saved replay artifact: ${artifactPath}`,
+        `  Replay (PowerShell): race-debugger replay ${quotePowerShellArgument(artifactPath)}`,
+        `  Replay (POSIX): race-debugger replay ${quotePosixArgument(artifactPath)}`
       ];
       const perturbations = input.perturbations ?? [];
+      summary.push("├─ Trigger ──────────────────────────────────");
       summary.push(
         perturbations.length === 0
-          ? "Found at perturbation: baseline"
-          : `Found at perturbation: ${perturbations.map(formatPerturbation).join(", ")}`
+          ? "  Found at perturbation: baseline"
+          : `  Found at perturbation: ${perturbations.map(formatPerturbation).join(", ")}`
       );
       if (input.failureReason !== undefined) {
-        summary.push(`Failure reason: ${input.failureReason}`);
-      }
-      if ((input.events?.length ?? 0) > 0) {
-        summary.push(
-          `Failure evidence: ${input.events?.map(formatEvent).join("; ")}`
-        );
+        summary.push(`  Failure reason: ${input.failureReason}`);
       }
       if (input.scope !== undefined) {
+        summary.push("├─ Search scope ─────────────────────────────");
         summary.push(
-          `Search scope: ${input.scope.workloads} workloads, ${input.scope.dimensions} perturbation dimensions, ${input.scope.candidates} candidate schedules.`
+          `  Search scope: ${input.scope.workloads} workloads, ${input.scope.dimensions} perturbation dimensions, ${input.scope.candidates} candidate schedules.`
         );
       }
       if (input.exploredSchedules !== undefined) {
         summary.push(
-          `Scope explored: ${input.exploredSchedules} of ${input.scope?.candidates ?? input.exploredSchedules} candidate schedules (stopped at first failure).`
+          `  Scope explored: ${input.exploredSchedules} of ${input.scope?.candidates ?? input.exploredSchedules} candidate schedules (stopped at first failure).`
         );
       }
       if (input.originalPerturbations !== undefined) {
+        summary.push("├─ Minimization ─────────────────────────────");
         summary.push(
-          `Minimization: ${input.originalPerturbations} perturbation(s) → ${perturbations.length} perturbation(s).`
+          `  Minimization: ${input.originalPerturbations} perturbation(s) → ${perturbations.length} perturbation(s).`
         );
       }
+      appendEvidence(summary, "Failure evidence", input.events ?? []);
+      summary.push("╰─ ✿ Ready to replay ✿ ──────────────────────╯");
       return styleFailure(summary.join("\n"), input.useColor === true);
     case "no-failure":
       return `No failure found after ${input.testedSchedules ?? 0} schedules.`;
@@ -97,20 +100,41 @@ export function renderReplaySummary(
     ? artifact.target.composeFile
     : artifact.target.manifestPath;
   const perturbations = artifact.minimizedSchedule.perturbations;
-  return styleFailure([
+  const summary = [
+    "╭─ ✿ REPLAY PROOF ✿ ────────────────────────╮",
     status === "reproduced"
       ? "Replay reproduced expected failure."
       : "Replay did not reproduce expected failure.",
-    `Replay target: ${targetPath}`,
+    `├─ Target ───────────────────────────────────`,
+    `  Replay target: ${targetPath}`,
+    "├─ Schedule ─────────────────────────────────",
     perturbations.length === 0
-      ? "Replay perturbation: baseline"
-      : `Replay perturbation: ${perturbations.map(formatPerturbation).join(", ")}`,
-    `Expected failure: ${artifact.expectedFailureReason ?? "not recorded"}`,
-    `Observed failure: ${result.failureReason ?? "none"}`,
-    `Replay execution: ${result.status.toUpperCase()} (schedule ${result.scheduleId}).`,
-    `Evidence matched: ${evidenceMatched}/${artifact.events.length} timeline events.`,
-    `Replay evidence: ${result.events.length === 0 ? "none" : result.events.map(formatEvent).join("; ")}`,
-  ].join("\n"), useColor);
+      ? "  Replay perturbation: baseline"
+      : `  Replay perturbation: ${perturbations.map(formatPerturbation).join(", ")}`,
+    "├─ Oracle comparison ────────────────────────",
+    `  Expected failure: ${artifact.expectedFailureReason ?? "not recorded"}`,
+    `  Observed failure: ${result.failureReason ?? "none"}`,
+    `  Replay execution: ${result.status.toUpperCase()} (schedule ${result.scheduleId}).`,
+    `  Evidence matched: ${evidenceMatched}/${artifact.events.length} timeline events.`,
+  ];
+  appendEvidence(summary, "Replay evidence", result.events);
+  summary.push("╰─ ✿ Evidence verified ✿ ────────────────────╯");
+  return styleFailure(summary.join("\n"), useColor);
+}
+
+function appendEvidence(
+  lines: string[],
+  label: string,
+  events: Array<{ timeMs: number; service: string; event: string; detail?: string }>,
+): void {
+  if (events.length === 0) {
+    lines.push(`├─ ${label} ────────────────────────────────`, "  none");
+    return;
+  }
+  lines.push(`├─ ${label} ────────────────────────────────`);
+  for (const [index, event] of events.entries()) {
+    lines.push(`${index === 0 ? `${label}: ` : "  • "}${formatEvent(event)}`);
+  }
 }
 
 function styleFailure(value: string, useColor: boolean): string {

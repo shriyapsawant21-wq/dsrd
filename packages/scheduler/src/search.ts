@@ -19,9 +19,13 @@ export type SearchResult =
 export async function searchSchedules(
   schedules: readonly Schedule[],
   target: TargetConfig,
-  runSchedule: RunSchedule
+  runSchedule: RunSchedule,
+  options: { maxSchedules?: number } = {},
 ): Promise<SearchResult> {
-  for (const [index, schedule] of schedules.entries()) {
+  const candidates = options.maxSchedules === undefined
+    ? schedules
+    : schedules.slice(0, options.maxSchedules);
+  for (const [index, schedule] of candidates.entries()) {
     const result = await runSchedule(target, schedule);
     if (result.status === "fail") {
       return {
@@ -34,5 +38,5 @@ export async function searchSchedules(
     }
   }
 
-  return { status: "no_failure", testedSchedules: schedules.length };
+  return { status: "no_failure", testedSchedules: candidates.length };
 }

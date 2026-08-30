@@ -16,6 +16,7 @@ export type DiscoverFailureOptions = {
   target: TargetConfig;
   createdAt?: string;
   runSchedule: RunSchedule;
+  maxSchedules?: number;
 };
 
 export type DiscoveryResult =
@@ -37,7 +38,9 @@ export type ReplayResult = {
 export async function discoverFailure(
   options: DiscoverFailureOptions
 ): Promise<DiscoveryResult> {
-  const searchResult = await searchSchedules(options.candidates, options.target, options.runSchedule);
+  const searchResult = await searchSchedules(options.candidates, options.target, options.runSchedule, {
+    maxSchedules: options.maxSchedules,
+  });
   if (searchResult.status === "no_failure") {
     return searchResult;
   }
@@ -48,10 +51,11 @@ export async function discoverFailure(
     options.runSchedule,
     options.delayOptionsMs
   );
-  const minimizedRun = await options.runSchedule(options.target, minimizedSchedule);
-  if (minimizedRun.status !== "fail") {
-    throw new Error("Minimization produced a schedule that did not reproduce the failure");
-  }
+  const minimizedRun = await confirmFailure(
+    minimizedSchedule,
+    options.target,
+    options.runSchedule,
+  );
 
   return {
     status: "found_failure",
@@ -65,6 +69,32 @@ export async function discoverFailure(
       events: minimizedRun.events
     })
   };
+}
+
+async function confirmFailure(
+  schedule: Schedule,
+  target: TargetConfig,
+  runSchedule: RunSchedule,
+): Promise<RunResult> {
+  const attempts = 3;
+  const requiredFailures = 2;
+  let failures = 0;
+  let lastFailure: RunResult | undefined;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const result = await runSchedule(target, schedule);
+    if (result.status === "fail") {
+      failures += 1;
+      lastFailure = result;
+    }
+  }
+
+  if (lastFailure === undefined || failures < requiredFailures) {
+    throw new Error(
+      `Minimized schedule was unstable: failure reproduced ${failures}/${attempts} times`,
+    );
+  }
+  return lastFailure;
 }
 
 export async function replayFailure(

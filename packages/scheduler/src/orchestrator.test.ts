@@ -66,6 +66,28 @@ describe("orchestration", () => {
     });
   });
 
+  it("confirms a flaky minimized schedule before creating the artifact", async () => {
+    const schedule = {
+      id: "schedule-flaky",
+      perturbations: [{ workloadId: "bootstrap", phase: "ready" as const, delayMs: 1000 }],
+    };
+    let calls = 0;
+    const result = await discoverFailure({
+      candidates: [{ id: "baseline", perturbations: [] }, schedule],
+      delayOptionsMs: [0, 1000],
+      target,
+      runSchedule: async (_target, candidate) => {
+        calls += 1;
+        if (calls === 1 || candidate.perturbations.length === 0) return fakeRun(candidate);
+        if (calls === 2) return fakeRun(candidate);
+        return calls === 3 ? { ...fakeRun(candidate), status: "pass", events: [] } : fakeRun(candidate);
+      },
+    });
+
+    expect(result.status).toBe("found_failure");
+    expect(calls).toBe(6);
+  });
+
   it("does not reproduce when replay lacks the artifact oracle evidence", async () => {
     const artifact = {
       version: 2 as const,
