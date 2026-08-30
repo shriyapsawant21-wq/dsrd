@@ -74,7 +74,7 @@ export class DockerRuntimeController {
       runFailure = error;
     }
     observationAbort.abort();
-    await startup.inFlight?.catch(() => undefined);
+    void startup.inFlight?.catch(() => undefined);
 
     try {
       await this.cleanup();

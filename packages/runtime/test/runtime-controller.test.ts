@@ -280,7 +280,7 @@ describe("DockerRuntimeController", () => {
     expect(compose.actions.at(-1)).toBe("stop");
   });
 
-  it("waits for an in-flight independent start before timeout cleanup", async () => {
+  it("cleans up when an in-flight independent start ignores timeout cancellation", async () => {
     const compose = new BlockingStartCompose();
     const delay = new BlockingDelay();
     const controller = new DockerRuntimeController({
@@ -293,18 +293,18 @@ describe("DockerRuntimeController", () => {
       id: "timed-out-during-api-start",
       perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
     }, ["api", "postgres"]);
-    const runFailure = run.then(
-      () => undefined,
-      (error: unknown) => error,
-    );
 
     await compose.waitForStart();
-    await new Promise<void>((resolve) => setTimeout(resolve, 20));
-    expect(compose.actions).not.toContain("stop");
+    const outcome = await Promise.race([
+      run.catch((error: unknown) => error),
+      new Promise<"still-running">((resolve) => setTimeout(() => resolve("still-running"), 50)),
+    ]);
 
+    expect(outcome).toBeInstanceOf(RunTimeoutError);
+    expect(compose.actions).toContain("stop");
     compose.releaseStart();
-    await expect(runFailure).resolves.toBeInstanceOf(RunTimeoutError);
-    expect(compose.actions).toEqual(["reset", "start:api", "started:api", "stop"]);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(compose.actions).toEqual(["reset", "start:api", "stop", "started:api"]);
   });
 
   it("does not observe after a timed-out start settles", async () => {
