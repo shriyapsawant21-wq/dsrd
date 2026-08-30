@@ -18,6 +18,35 @@ export interface KubernetesResourceDiscovery {
   discoverResources(target: Extract<TargetConfig, { platform: "kubernetes" }>): Promise<KubernetesResourceDefinition[]>;
 }
 
+export type KubectlKubernetesResourceDiscoveryOptions = {
+  runner: CommandRunner;
+  cwd?: string;
+};
+
+export class KubectlKubernetesResourceDiscovery implements KubernetesResourceDiscovery {
+  constructor(private readonly options: KubectlKubernetesResourceDiscoveryOptions) {}
+
+  async discoverResources(target: Extract<TargetConfig, { platform: "kubernetes" }>): Promise<KubernetesResourceDefinition[]> {
+    const result = await this.options.runner.run({
+      command: "kubectl",
+      args: ["create", "--dry-run=client", "-f", target.manifestPath, "-o", "json", ...this.namespaceArgs(target)],
+      cwd: this.options.cwd ?? process.cwd(),
+    });
+    if (result.exitCode !== 0) throw new Error(`kubectl create failed: ${result.stderr || `exit code ${result.exitCode}`}`);
+    const parsed: unknown = JSON.parse(result.stdout);
+    const items = isRecord(parsed) && Array.isArray(parsed.items) ? parsed.items : [parsed];
+    return items.flatMap((item): KubernetesResourceDefinition[] => {
+      if (!isRecord(item) || !isRecord(item.metadata) || typeof item.metadata.name !== "string") return [];
+      if (item.kind !== "Deployment" && item.kind !== "StatefulSet" && item.kind !== "Job") return [];
+      return [{ name: item.metadata.name, kind: item.kind }];
+    });
+  }
+
+  private namespaceArgs(target: Extract<TargetConfig, { platform: "kubernetes" }>): string[] {
+    return target.namespace === undefined ? [] : ["--namespace", target.namespace];
+  }
+}
+
 export interface KubernetesScheduleExecutor {
   resetNamespace(): Promise<void>;
   runSchedule(schedule: Schedule, workloadOrder: string[]): Promise<RunResult>;
@@ -138,4 +167,8 @@ export class KubernetesExecutionPlatform implements ExecutionPlatform {
       seen.add(key);
     }
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

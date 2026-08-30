@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   KubernetesExecutionPlatform,
   KubectlKubernetesExecutor,
+  KubectlKubernetesResourceDiscovery,
   type CommandInvocation,
   type CommandResult,
   type CommandRunner,
@@ -116,5 +117,36 @@ describe("KubectlKubernetesExecutor", () => {
       { command: "kubectl", args: ["delete", "--ignore-not-found", "--wait=true", "-f", "fixture.yaml", "--namespace", "race-debugger"], cwd: process.cwd() },
       { command: "kubectl", args: ["apply", "-f", "fixture.yaml", "--namespace", "race-debugger"], cwd: process.cwd() },
     ]);
+  });
+});
+
+describe("KubectlKubernetesResourceDiscovery", () => {
+  it("normalizes kubectl dry-run output without contacting a cluster", async () => {
+    const runner = new RecordingRunner();
+    runner.run = async (invocation) => {
+      runner.invocations.push(invocation);
+      return {
+        stdout: JSON.stringify({ items: [
+          { kind: "Deployment", metadata: { name: "api" } },
+          { kind: "StatefulSet", metadata: { name: "database" } },
+          { kind: "Job", metadata: { name: "migrate" } },
+          { kind: "Service", metadata: { name: "ignored" } },
+        ] }),
+        stderr: "",
+        exitCode: 0,
+      };
+    };
+    const discovery = new KubectlKubernetesResourceDiscovery({ runner });
+
+    await expect(discovery.discoverResources(target)).resolves.toEqual([
+      { name: "api", kind: "Deployment" },
+      { name: "database", kind: "StatefulSet" },
+      { name: "migrate", kind: "Job" },
+    ]);
+    expect(runner.invocations).toEqual([{
+      command: "kubectl",
+      args: ["create", "--dry-run=client", "-f", "fixture.yaml", "-o", "json", "--namespace", "race-debugger"],
+      cwd: process.cwd(),
+    }]);
   });
 });
