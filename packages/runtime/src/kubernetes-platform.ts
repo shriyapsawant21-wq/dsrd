@@ -82,6 +82,10 @@ export class KubectlKubernetesExecutor implements KubernetesScheduleExecutor {
   constructor(private readonly options: KubectlKubernetesExecutorOptions) {}
 
   async resetNamespace(): Promise<void> {
+    if (this.options.target.namespace !== undefined) {
+      await this.runKubectl(["delete", "namespace", this.options.target.namespace, "--ignore-not-found", "--wait=true"]);
+      return;
+    }
     await this.runKubectl([
       "delete", "--ignore-not-found", "--wait=true", "-f", this.options.target.manifestPath,
       ...this.namespaceArgs(),

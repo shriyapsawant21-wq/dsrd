@@ -48,7 +48,21 @@ spec:
       containers:
         - name: database
           image: busybox:1.36
-          command: ["sh", "-c", "sleep 300"]
+          command: ["sh", "-c", "nc -lk -p 5432"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: database
+  namespace: dsrd-kubernetes-race
+  labels:
+    dsrd.workload: database
+spec:
+  selector:
+    app: database
+  ports:
+    - port: 5432
+      targetPort: 5432
 ---
 apiVersion: batch/v1
 kind: Job
@@ -58,10 +72,11 @@ metadata:
   labels:
     dsrd.workload: migrate
 spec:
+  backoffLimit: 0
   template:
     spec:
       restartPolicy: Never
       containers:
         - name: migrate
           image: busybox:1.36
-          command: ["sh", "-c", "true"]
+          command: ["sh", "-c", "for i in 1 2 3 4 5; do nc -z database 5432 && exit 0; sleep 0.2; done; echo dependency unavailable; exit 1"]

@@ -152,8 +152,8 @@ describe("KubectlKubernetesExecutor", () => {
     }, ["api", "postgres", "migrate"]);
 
     expect(runner.invocations.slice(0, 3)).toEqual([
-      { command: "kubectl", args: ["delete", "--ignore-not-found", "--wait=true", "-f", "fixture.yaml", "--namespace", "race-debugger"], cwd: process.cwd() },
-      { command: "kubectl", args: ["delete", "--ignore-not-found", "--wait=true", "-f", "fixture.yaml", "--namespace", "race-debugger"], cwd: process.cwd() },
+      { command: "kubectl", args: ["delete", "namespace", "race-debugger", "--ignore-not-found", "--wait=true"], cwd: process.cwd() },
+      { command: "kubectl", args: ["delete", "namespace", "race-debugger", "--ignore-not-found", "--wait=true"], cwd: process.cwd() },
       { command: "kubectl", args: ["apply", "-f", "fixture.yaml", "-l", "dsrd.infrastructure=namespace", "--namespace", "race-debugger"], cwd: process.cwd() },
     ]);
     expect(runner.invocations.slice(3).map(({ args }) => args[args.indexOf("-l") + 1]).sort())
