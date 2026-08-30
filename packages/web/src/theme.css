@@ -1,0 +1,76 @@
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pink);
+  cursor: pointer;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+
+.theme-toggle:hover {
+  transform: rotate(12deg) scale(1.08);
+}
+
+.app {
+  background-color: #030303;
+  background-image: none;
+}
+
+.nav {
+  background: #030303;
+  border-bottom: 1px solid var(--pink);
+}
+
+.app[data-theme="light"] {
+  --dim: #5d1839;
+  --line: #a73a6d;
+  min-height: 100vh;
+  color: #ff078b;
+  background: #ffdbea;
+}
+
+.app[data-theme="light"] .nav {
+  background: #ffdbea;
+}
+
+.app[data-theme="light"] .drop-zone {
+  background: rgba(255, 240, 247, .45);
+}
+
+.app[data-theme="light"] .drop-zone:hover,
+.app[data-theme="light"] .drop-zone.dragging,
+.app[data-theme="light"] .failure-table button:hover {
+  background: #ffc5df;
+}
+
+.app[data-theme="light"] .drop-zone span,
+.app[data-theme="light"] .drop-zone small,
+.app[data-theme="light"] .constraint,
+.app[data-theme="light"] .scroll-cue,
+.app[data-theme="light"] .system-row,
+.app[data-theme="light"] .back,
+.app[data-theme="light"] .event,
+.app[data-theme="light"] .event time,
+.app[data-theme="light"] .state p {
+  color: #111;
+}
+
+.app[data-theme="light"] .progress-track {
+  background: #3d2b33;
+}
+
+.app[data-theme="light"] .event.fatal {
+  color: #000;
+  background: #ffc1da;
+}
+
+.app[data-theme="light"] .detail h2 {
+  border-bottom-color: #111;
+}
+
+.app[data-theme="light"] .detail pre {
+  color: #000;
+  background: #ffc9df;
+}
