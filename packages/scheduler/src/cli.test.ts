@@ -71,6 +71,9 @@ describe("race-debugger CLI", () => {
     expect(prompts).toContain("Local manifest path: ");
     expect(prompts).toContain("Save results as [failure.json]: ");
     expect(output.join("\n")).toContain("RUN 01");
+    expect(output.join("\n")).toContain("PASS\n\nRUN 02");
+    expect(output.join("\n")).toContain("FAIL — race detected\n\nRUN 03");
+    expect(output.join("\n")).toContain("\n\nFailure found");
     await expect(loadFailureArtifact(artifactPath)).resolves.toMatchObject({ version: 2 });
   });
 

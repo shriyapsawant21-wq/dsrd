@@ -76,11 +76,13 @@ export async function runCli(
         dependencies.log(`RUN ${runNumber.toString().padStart(2, "0")}  ${describeSchedule(schedule)}`);
         const runResult = await runSchedule(runTarget, schedule);
         dependencies.log(runResult.status === "pass" ? "PASS" : "FAIL — race detected");
+        dependencies.log("");
         return runResult;
       };
       dependencies.log(options.quick
         ? `Starting quick scan (${candidates.length} schedules maximum).`
         : `Starting thorough scan (${candidates.length} schedules maximum).`);
+      dependencies.log("");
       const result = await discoverFailure({
         candidates,
         delayOptionsMs,
