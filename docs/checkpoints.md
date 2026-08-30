@@ -82,11 +82,11 @@ Blockers: none
 Next checkpoint: C7
 
 ## C7 — Kubernetes adapter
-Status: planned
+Status: in progress
 Owner: Riya, Shriya, Akil
-Evidence: Admission evaluated: C7 remains planned. The record has no explicit team admission, repeated C4/C5 reliability evidence, or disposable-cluster verification; no Kubernetes adapter work was started.
-Commit/PR: feat/kubernetes-adapter checkpoint handoff commit
-Remaining work: explicit team admission, repeated C4/C5 reliability evidence, and disposable-cluster verification.
-Dependencies: waiting on explicit team admission after repeatable C4/C5.
-Blockers: Kubernetes is future-only and outside MVP delivery until admission is recorded.
+Evidence: Implemented: optional Kubernetes ExecutionPlatform discovery, schedule validation, reset/run/replay delegation, and fake-executor tests. Pending live-cluster verification with fixtures/kubernetes-startup-race/manifest.yaml; no Kubernetes package or cluster dependency was added to Compose/local development.
+Commit/PR: feat/kubernetes-adapter
+Remaining work: run the disposable-cluster verification and record normal startup, a discovered failure, minimized schedule, and deterministic replay evidence.
+Dependencies: explicit admission received; waiting on live cluster verification output.
+Blockers: none
 Next checkpoint: C7
