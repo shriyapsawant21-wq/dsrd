@@ -1,11 +1,11 @@
 # DSRD — Distributed Startup Race Debugger
 
-A local chaos-style debugger for Docker Compose applications that actively explores startup timing to discover, minimize, and replay hidden startup race conditions.
+A local startup-race debugger for Docker Compose, local-process, and optional Kubernetes targets. It actively explores startup timing to discover, minimize, and replay hidden readiness failures.
 
 ## Core Idea
 
 ```text
-normal Compose app
+ normal application target
       -> perturb startup timing
       -> execute repeatedly
       -> detect a failing schedule
@@ -16,6 +16,36 @@ normal Compose app
 ```
 
 This is a dynamic debugger, not an AI log summarizer or static Compose linter.
+
+## Why use DSRD
+
+DSRD changes execution timing and relies on deterministic runtime evidence from
+the failure oracle. That means it can produce a minimized, replayable
+counterexample for a race that a normal startup, static dependency graph, or
+log summary can miss. The saved artifact includes the target and schedule, so
+replay follows the same platform and oracle path as discovery.
+
+## Quick start
+
+```bash
+npm install
+npm run build
+race-debugger search --platform local-process --target fixtures/local-startup-race/manifest.json --delay-options 0,100 --output failure.json
+race-debugger replay failure.json
+```
+
+Use `compose` with a Compose file, or `local-process` with a local-process
+manifest. Kubernetes remains optional: it requires `kubectl` and a disposable
+cluster only when `--platform kubernetes` is selected.
+
+```bash
+race-debugger search --platform kubernetes --target fixtures/kubernetes-startup-race/manifest.yaml --delay-options 0,1500 --output kubernetes-failure.json
+race-debugger replay kubernetes-failure.json
+```
+
+For the supplied local Kind fixture, create/select the `kind-dsrd-c7` context
+before running the Kubernetes command. No kubeconfig, token, or cluster is
+needed for Compose and local-process workflows.
 
 ## Team
 - Akil — schedule exploration, minimization, CLI
