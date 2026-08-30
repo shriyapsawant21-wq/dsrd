@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { stat } from "node:fs/promises";
+import { join } from "node:path";
 
 import { loadFailureArtifact, saveFailureArtifact } from "./artifact.js";
 import { generateCandidates, generateFocusedCandidates } from "./candidates.js";
@@ -19,6 +20,27 @@ export type CliDependencies = {
   useColor?: boolean;
   prompt?: PromptAdapter;
 };
+
+const composeTargetFiles = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
+
+export async function resolveTargetPath(platform: string, targetPath: string): Promise<string> {
+  const targetStat = await stat(targetPath);
+  if (targetStat.isFile()) return targetPath;
+  if (!targetStat.isDirectory()) throw new Error(`Target path is not a project directory or file: ${targetPath}`);
+
+  const filenames = platform === "compose" ? composeTargetFiles : platform === "local-process" ? ["manifest.json"] : [];
+  for (const filename of filenames) {
+    const candidate = join(targetPath, filename);
+    try {
+      if ((await stat(candidate)).isFile()) return candidate;
+    } catch {
+      // Try the next conventional project file.
+    }
+  }
+
+  const description = platform === "compose" ? "Compose file" : platform === "local-process" ? "manifest.json" : "target file";
+  throw new Error(`No ${description} found in project directory: ${targetPath}`);
+}
 
 export async function runCli(
   args: readonly string[],
@@ -57,7 +79,7 @@ export async function runCli(
     .command("search")
     .description("search for a failing startup schedule")
     .option("-p, --platform <platform>", "target platform", "local-process")
-    .option("-t, --target <path>", "target manifest or compose file", "race.json")
+    .option("-t, --target <path>", "project directory containing the target manifest", ".")
     .option("-d, --delay-options <milliseconds>", "comma-separated delay values")
     .option("--quick", "test one perturbation at a time with a small delay set")
     .option("-o, --output <path>", "artifact output path", "failure.json")
@@ -65,7 +87,7 @@ export async function runCli(
       const delayOptionsMs = options.delayOptions
         ? parseDelayOptions(options.delayOptions)
         : options.quick ? quickDelayOptionsMs : defaultDelayOptionsMs;
-      const target = targetConfig(options.platform, options.target);
+      const target = targetConfig(options.platform, await resolveTargetPath(options.platform, options.target));
       const workloads = await dependencies.platform.discover(target);
       const candidates = options.quick
         ? generateFocusedCandidates(workloads, delayOptionsMs)
@@ -186,14 +208,15 @@ async function chooseExistingTarget(
   prompt: PromptAdapter,
   log: (message: string) => void
 ): Promise<string> {
-  const message = platform === "compose" ? "Compose file path: " : "Local manifest path: ";
+  const message = platform === "compose" ? "Compose project directory: " : "Local-process project directory: ";
   while (true) {
     const path = cleanPath(await prompt.ask(message));
-    if (!path) { log("A file path is required."); continue; }
+    if (!path) { log("A project directory is required."); continue; }
     try {
-      if ((await stat(path)).isFile()) return path;
-    } catch { /* reported below */ }
-    log(`File not found: ${path}`);
+      return await resolveTargetPath(platform, path);
+    } catch (error) {
+      log(error instanceof Error && error.message.startsWith("No ") ? error.message : `File not found: ${path}`);
+    }
   }
 }
 
