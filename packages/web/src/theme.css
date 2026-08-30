@@ -13,19 +13,14 @@
   transform: rotate(12deg) scale(1.08);
 }
 
-.nav {
-  border-bottom: 0;
+.app {
+  background-color: #030303;
+  background-image: none;
 }
 
-.nav::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: calc(5.5% + 150px);
-  height: 1px;
-  background: var(--pink);
-  pointer-events: none;
+.nav {
+  background: #030303;
+  border-bottom: 1px solid var(--pink);
 }
 
 .app[data-theme="light"] {
@@ -33,14 +28,11 @@
   --line: #a73a6d;
   min-height: 100vh;
   color: #ff078b;
-  background-color: #ffdbea;
-  background-image:
-    linear-gradient(rgba(0, 0, 0, .025) 1px, transparent 1px),
-    radial-gradient(circle at 50% 40%, #fff0f7 0, #ffdbea 58%);
+  background: #ffdbea;
 }
 
 .app[data-theme="light"] .nav {
-  background: rgba(255, 219, 234, .94);
+  background: #ffdbea;
 }
 
 .app[data-theme="light"] .drop-zone {
@@ -81,10 +73,4 @@
 .app[data-theme="light"] .detail pre {
   color: #000;
   background: #ffc9df;
-}
-
-@media (max-width: 650px) {
-  .nav::after {
-    left: 170px;
-  }
 }

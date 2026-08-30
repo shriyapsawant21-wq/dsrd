@@ -12,7 +12,7 @@ export function getLogoMotion(scrollY: number, viewportWidth: number, viewportHe
   const interpolate = (start: number, end: number) => start + (end - start) * progress;
   return {
     left: interpolate(viewportWidth / 2, viewportWidth * 0.055),
-    top: interpolate(viewportHeight / 2, 20),
+    top: interpolate(viewportHeight / 2, 32),
     width: interpolate(startWidth, 150),
     translateXPercent: interpolate(-50, 0)
   };
