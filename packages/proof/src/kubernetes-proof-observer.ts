@@ -1,14 +1,13 @@
 import type { Workload } from "@dsrd/contracts";
 
 import { WorkloadProofObserver, type WorkloadProofObserverOptions } from "./runtime-proof-observer.js";
-import type { WorkloadEvent, WorkloadStateObservation } from "./oracle/types.js";
 
 export type KubernetesObservation = {
   scheduleId: string;
   startedAtMs: number;
-  states: WorkloadStateObservation[];
+  states: Array<{ workload: string; state: "running" | "exited" | "missing"; exitCode?: number; observedAtMs: number }>;
   logs: string[];
-  events: WorkloadEvent[];
+  events: Array<{ workload: string; timeMs: number; event: string; detail?: string }>;
 };
 
 export class KubernetesProofObserver {

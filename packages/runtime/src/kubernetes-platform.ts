@@ -56,9 +56,22 @@ export interface KubernetesScheduleExecutor {
 export type KubectlKubernetesExecutorOptions = {
   target: Extract<TargetConfig, { platform: "kubernetes" }>;
   runner: CommandRunner;
-  evaluate(scheduleId: string): Promise<RunResult>;
+  evaluate?: (scheduleId: string) => Promise<RunResult>;
+  observer?: KubernetesRunObserver;
   cwd?: string;
 };
+
+export type KubernetesRunSnapshot = {
+  scheduleId: string;
+  startedAtMs: number;
+  states: Array<{ workload: string; state: "running" | "exited" | "missing"; exitCode?: number; observedAtMs: number }>;
+  logs: string[];
+  events: Array<{ workload: string; timeMs: number; event: string; detail?: string }>;
+};
+
+export interface KubernetesRunObserver {
+  evaluate(snapshot: KubernetesRunSnapshot): Promise<RunResult>;
+}
 
 /**
  * A manifest-scoped Kubernetes lifecycle executor. It intentionally leaves
@@ -76,6 +89,7 @@ export class KubectlKubernetesExecutor implements KubernetesScheduleExecutor {
   }
 
   async runSchedule(schedule: Schedule, _workloadOrder: string[]): Promise<RunResult> {
+    const startedAtMs = Date.now();
     await this.resetNamespace();
     await this.applySelector("dsrd.infrastructure=namespace");
     const startDelays = new Map(schedule.perturbations
@@ -86,7 +100,11 @@ export class KubectlKubernetesExecutor implements KubernetesScheduleExecutor {
       if (delayMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
       await this.applySelector(`dsrd.workload=${workloadId}`);
     }
-    return this.options.evaluate(schedule.id);
+    if (this.options.observer !== undefined) {
+      return this.options.observer.evaluate(await this.observe(schedule.id, _workloadOrder, startedAtMs));
+    }
+    if (this.options.evaluate !== undefined) return this.options.evaluate(schedule.id);
+    throw new Error("Kubernetes executor requires an observer or evaluator");
   }
 
   async replaySchedule(schedule: Schedule, workloadOrder: string[]): Promise<RunResult> {
@@ -108,6 +126,31 @@ export class KubectlKubernetesExecutor implements KubernetesScheduleExecutor {
     await this.runKubectl([
       "apply", "-f", this.options.target.manifestPath, "-l", selector, ...this.namespaceArgs(),
     ]);
+  }
+
+  private async observe(scheduleId: string, workloadOrder: string[], startedAtMs: number): Promise<KubernetesRunSnapshot> {
+    const pods = await this.runKubectlResult(["get", "pods", "-o", "json", ...this.namespaceArgs()]);
+    const parsed = JSON.parse(pods.stdout) as KubernetesPodList;
+    const byWorkload = new Map<string, { state: "running" | "exited" | "missing"; exitCode?: number }>();
+    for (const pod of parsed.items ?? []) {
+      const workload = pod.metadata?.labels?.["dsrd.workload"];
+      if (workload === undefined) continue;
+      const exitCode = pod.status?.containerStatuses?.find((status) => status.state?.terminated !== undefined)?.state?.terminated?.exitCode;
+      byWorkload.set(workload, { state: exitCode !== undefined || pod.status?.phase === "Failed" || pod.status?.phase === "Succeeded" ? "exited" : "running", ...(exitCode === undefined ? {} : { exitCode }) });
+    }
+    const logs: string[] = [];
+    for (const workload of workloadOrder) {
+      const result = await this.runKubectlResult(["logs", "-l", `dsrd.workload=${workload}`, "--all-containers", ...this.namespaceArgs()]);
+      if (result.stdout.trim()) logs.push(`${workload}: ${result.stdout.trimEnd()}`);
+    }
+    const now = Date.now();
+    return { scheduleId, startedAtMs, states: workloadOrder.map((workload) => ({ workload, ...(byWorkload.get(workload) ?? { state: "missing" as const }), observedAtMs: now })), logs, events: [] };
+  }
+
+  private async runKubectlResult(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const result = await this.options.runner.run({ command: "kubectl", args, cwd: this.options.cwd ?? process.cwd() });
+    if (result.exitCode !== 0) throw new Error(`kubectl ${args[0]} failed: ${result.stderr || `exit code ${result.exitCode}`}`);
+    return result;
   }
 
   private namespaceArgs(): string[] {
@@ -182,3 +225,13 @@ export class KubernetesExecutionPlatform implements ExecutionPlatform {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
+
+type KubernetesPodList = {
+  items?: Array<{
+    metadata?: { labels?: Record<string, string> };
+    status?: {
+      phase?: string;
+      containerStatuses?: Array<{ state?: { terminated?: { exitCode?: number } } }>;
+    };
+  }>;
+};

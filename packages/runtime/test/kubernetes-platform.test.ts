@@ -98,6 +98,33 @@ class RecordingRunner implements CommandRunner {
 }
 
 describe("KubectlKubernetesExecutor", () => {
+  it("collects workload pod state and logs through its injected observer", async () => {
+    const runner = new RecordingRunner();
+    runner.run = async (invocation) => {
+      runner.invocations.push(invocation);
+      if (invocation.args[0] === "get") return { stdout: JSON.stringify({ items: [{ metadata: { labels: { "dsrd.workload": "migrate" } }, status: { phase: "Failed", containerStatuses: [{ state: { terminated: { exitCode: 1 } } }] } }] }), stderr: "", exitCode: 0 };
+      if (invocation.args[0] === "logs") return { stdout: "dependency unavailable\n", stderr: "", exitCode: 0 };
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+    const observed: unknown[] = [];
+    const executor = new KubectlKubernetesExecutor({
+      target: { platform: "kubernetes", manifestPath: "fixture.yaml", namespace: "race-debugger" },
+      runner,
+      observer: { evaluate: async (snapshot) => {
+        observed.push(snapshot);
+        return { scheduleId: snapshot.scheduleId, status: "fail", events: [], logs: snapshot.logs };
+      } },
+    });
+
+    await expect(executor.runSchedule({ id: "failed-job", perturbations: [] }, ["migrate"]))
+      .resolves.toMatchObject({ status: "fail" });
+    expect(observed).toEqual([expect.objectContaining({
+      scheduleId: "failed-job",
+      states: [expect.objectContaining({ workload: "migrate", state: "exited", exitCode: 1 })],
+      logs: ["migrate: dependency unavailable"],
+    })]);
+  });
+
   it("resets manifest-scoped resources and applies each workload separately through kubectl", async () => {
     const runner = new RecordingRunner();
     const executor = new KubectlKubernetesExecutor({
