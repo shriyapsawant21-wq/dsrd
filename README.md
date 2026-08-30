@@ -67,13 +67,17 @@ needed for Compose and local-process workflows.
 ### Interactive dashboard
 
 Run `race-debugger` with no command from a terminal to open the DSRD dashboard and choose Search, Replay, or Quit.
+The guided search uses numbered Docker Compose/local-process choices, validates the selected file, and offers a recommended Quick scan that tests one perturbation at a time. Choose Thorough scan only when you intentionally want the larger Cartesian search.
 
 ### Scriptable commands
 
 ```bash
-race-debugger search
+race-debugger search --platform local-process --target fixtures/local-startup-race/manifest.json
+race-debugger search --platform compose --target fixtures/startup-race/compose.yaml
 race-debugger replay failure.json
 ```
+
+The production CLI routes local-process targets to the local runtime and Compose targets to the Docker Compose runtime. Kubernetes targets return a clear unsupported message until C7 is integrated.
 
 ### PowerShell and POSIX replay hints
 

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -52,19 +52,48 @@ describe("race-debugger CLI", () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-"));
     directories.push(directory);
     const artifactPath = join(directory, "failure.json");
-    const answers = ["s", "", "race.json", "", artifactPath];
+    const manifestPath = join(directory, "race.json");
+    await writeFile(manifestPath, "{}");
+    const answers = ["s", "2", manifestPath, "1", artifactPath];
     const output: string[] = [];
+    const prompts: string[] = [];
 
     await runCli([], {
       platform: fakePlatform,
       log: (message) => output.push(message),
       interactive: true,
       useColor: false,
-      prompt: { ask: async () => answers.shift() ?? "", close: () => undefined }
+      prompt: { ask: async (message) => { prompts.push(message); return answers.shift() ?? ""; }, close: () => undefined }
     });
 
     expect(output.join("\n")).toContain("Discover, minimize, and replay startup race conditions.");
+    expect(output.join("\n")).toContain("[1] Docker Compose");
+    expect(prompts).toContain("Local manifest path: ");
+    expect(prompts).toContain("Save results as [failure.json]: ");
+    expect(output.join("\n")).toContain("RUN 01");
+    expect(output.join("\n")).toContain("PASS\n\nRUN 02");
+    expect(output.join("\n")).toContain("FAIL — race detected\n\nRUN 03");
+    expect(output.join("\n")).toContain("\n\nFailure found");
     await expect(loadFailureArtifact(artifactPath)).resolves.toMatchObject({ version: 2 });
+  });
+
+  it("retries when the guided target file does not exist", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-"));
+    directories.push(directory);
+    const composePath = join(directory, "compose.yaml");
+    const artifactPath = join(directory, "failure.json");
+    await writeFile(composePath, "services: {}");
+    const answers = ["s", "1", "missing.yaml", composePath, "1", artifactPath];
+    const output: string[] = [];
+
+    await runCli([], {
+      platform: fakePlatform,
+      log: (message) => output.push(message),
+      interactive: true,
+      prompt: { ask: async () => answers.shift() ?? "", close: () => undefined },
+    });
+
+    expect(output.join("\n")).toContain("File not found: missing.yaml");
   });
 
   it("quits from the dashboard without platform execution", async () => {
