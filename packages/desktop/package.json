@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "dist/main.js",
+  "main": "dist/main.cjs",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "dev": "concurrently -k -s first \"npm run dev --workspace=@dsrd/web -- --host 127.0.0.1 --strictPort\" \"wait-on http-get://127.0.0.1:5173 && cross-env DSRD_RENDERER_URL=http://127.0.0.1:5173 electron dist/main.js\""
+    "dev": "concurrently -k -s first \"npm run dev --workspace=@dsrd/web -- --host 127.0.0.1 --strictPort\" \"wait-on http-get://127.0.0.1:5173 && cross-env ELECTRON_RUN_AS_NODE= DSRD_RENDERER_URL=http://127.0.0.1:5173 electron dist/main.cjs\""
   },
   "dependencies": {
     "@dsrd/api": "0.1.0"

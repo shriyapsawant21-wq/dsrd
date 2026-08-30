@@ -1,4 +1,4 @@
-import type { BrowserWindowConstructorOptions } from "electron";
+import type { BrowserWindowConstructorOptions } from "electron/main";
 
 export function createWindowOptions(preloadPath: string): BrowserWindowConstructorOptions {
   return {

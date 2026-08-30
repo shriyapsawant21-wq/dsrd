@@ -100,5 +100,18 @@ Open `http://127.0.0.1:5173`, scroll to `INITIALIZE_SEQUENCE`, and upload a `.ya
 
 The current upload contract accepts one self-contained Compose file. Compose projects that reference local build contexts, env files, bind-mounted source, or other companion files need archive/project-directory staging before they can run from a browser upload.
 
+## Electron Desktop App
+
+Install dependencies once, make sure ports `4317` and `5173` are free, and run:
+
+```powershell
+npm install
+npm run dev:desktop
+```
+
+This command builds the execution pipeline, API, and Electron main process, then starts Vite and opens the same DSRD interface in a secure desktop window. Keep Docker Desktop running when exploring Docker Compose projects. Press `Ctrl+C` in the terminal to stop both Vite and Electron.
+
+The browser app and CLI remain available through `npm run dev:api`, `npm run dev:web`, and `node packages/scheduler/dist/main.js`.
+
 ## MVP Definition of Done
 A bug is only considered discovered when a normally working fixture fails under an explored schedule, the failure is automatically detected, the schedule is minimized, and replay reproduces the same expected failure.
