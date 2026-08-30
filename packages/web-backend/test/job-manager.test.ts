@@ -89,6 +89,23 @@ describe("JobManager", () => {
     expect(platform.resetCount).toBe(1);
     expect(jobs.eventsFor(job.id).at(-1)?.type).toBe("job_cancelled");
   });
+
+  it("does not expose operational error details in job state or events", async () => {
+    const platform = new FailingPlatform();
+    const jobs = new JobManager(new DebuggerService(() => platform));
+    const job = jobs.startSearch({ target, delayOptionsMs: [0] });
+
+    await waitFor(() => jobs.getJob(job.id)?.status === "failed");
+
+    expect(jobs.getJob(job.id)?.error).toEqual({
+      code: "EXECUTION_ERROR",
+      message: "Debugger execution failed"
+    });
+    expect(jobs.eventsFor(job.id).at(-1)).toMatchObject({
+      type: "job_failed",
+      message: "Debugger execution failed"
+    });
+  });
 });
 
 class ControlledPlatform implements ExecutionPlatform {
@@ -135,6 +152,28 @@ class ControlledPlatform implements ExecutionPlatform {
 
   releaseFirstRun(): void {
     this.signalFirstRunReleased();
+  }
+}
+
+class FailingPlatform implements ExecutionPlatform {
+  discover(): Promise<Workload[]> {
+    return Promise.resolve([{
+      id: "api",
+      kind: "service",
+      perturbablePhases: ["start"]
+    }]);
+  }
+
+  reset(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  run(): Promise<RunResult> {
+    return Promise.reject(new Error("token=do-not-expose"));
+  }
+
+  replay(): Promise<RunResult> {
+    return Promise.reject(new Error("token=do-not-expose"));
   }
 }
 

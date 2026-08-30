@@ -242,6 +242,6 @@ export class JobManager {
   }
 }
 
-function safeMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Debugger execution failed";
+function safeMessage(_error: unknown): string {
+  return "Debugger execution failed";
 }
