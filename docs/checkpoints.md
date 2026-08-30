@@ -84,9 +84,9 @@ Next checkpoint: C7
 ## C7 — Kubernetes adapter
 Status: blocked
 Owner: Riya, Shriya, Akil
-Evidence: Implemented: optional Kubernetes ExecutionPlatform discovery for Deployments, StatefulSets, and Jobs; manifest-scoped reset/replay; and per-workload, label-selected startup application verified by `npx vitest run packages/runtime/test/kubernetes-platform.test.ts` (4 passed). Fresh local Kind verification created the fixture namespace, applied Deployment, StatefulSet, and Job separately, listed the resources, and deleted the disposable namespace.
+Evidence: Implemented: optional Kubernetes ExecutionPlatform discovery for Deployments, StatefulSets, and Jobs; manifest-scoped reset/replay; per-workload, label-selected startup application; and a Kubernetes proof adapter that delegates failed Job observations to the deterministic workload oracle. Focused runtime and proof tests passed; local Kind verification created the fixture namespace, applied Deployment, StatefulSet, and Job separately, listed the resources, and deleted the disposable namespace.
 Commit/PR: feat/kubernetes-adapter
-Remaining work: Akil must select `TargetConfig.platform: "kubernetes"` in generic scheduler discovery/replay; Shriya must provide the Kubernetes resource-state/log collector and proof observer; then the team must verify normal startup, discovered failure, minimization, artifact, and deterministic replay.
-Dependencies: local kind-dsrd-c7 cluster ready; awaiting Akil generic scheduler integration and Shriya proof/evidence output.
-Blockers: Akil scheduler integration and Shriya Kubernetes proof/evidence adapter are not implemented on this branch; per ownership rules, Riya must not invent replacements.
+Remaining work: collect Kubernetes resource state/logs in runtime, bind the Kubernetes platform into the executable scheduler path, create the deterministic race fixture, and verify normal startup, discovery, minimization, artifact, and replay.
+Dependencies: local kind-dsrd-c7 cluster ready.
+Blockers: none
 Next checkpoint: C7
