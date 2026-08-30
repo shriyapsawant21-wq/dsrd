@@ -1,10 +1,10 @@
 import { runCli } from "./cli.js";
-import { fakePlatform } from "./fake-platform.js";
+import { createDefaultPlatform } from "./default-platform.js";
 
 const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
 
 runCli(process.argv.slice(2), {
-  platform: fakePlatform,
+  platform: createDefaultPlatform(),
   log: console.log,
   interactive,
   useColor: interactive
