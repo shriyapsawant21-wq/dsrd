@@ -98,7 +98,7 @@ class RecordingRunner implements CommandRunner {
 }
 
 describe("KubectlKubernetesExecutor", () => {
-  it("resets manifest-scoped resources and applies scheduled workloads through kubectl", async () => {
+  it("resets manifest-scoped resources and applies each workload separately through kubectl", async () => {
     const runner = new RecordingRunner();
     const executor = new KubectlKubernetesExecutor({
       target: { platform: "kubernetes", manifestPath: "fixture.yaml", namespace: "race-debugger" },
@@ -115,7 +115,10 @@ describe("KubectlKubernetesExecutor", () => {
     expect(runner.invocations).toEqual([
       { command: "kubectl", args: ["delete", "--ignore-not-found", "--wait=true", "-f", "fixture.yaml", "--namespace", "race-debugger"], cwd: process.cwd() },
       { command: "kubectl", args: ["delete", "--ignore-not-found", "--wait=true", "-f", "fixture.yaml", "--namespace", "race-debugger"], cwd: process.cwd() },
-      { command: "kubectl", args: ["apply", "-f", "fixture.yaml", "--namespace", "race-debugger"], cwd: process.cwd() },
+      { command: "kubectl", args: ["apply", "-f", "fixture.yaml", "-l", "dsrd.infrastructure=namespace", "--namespace", "race-debugger"], cwd: process.cwd() },
+      { command: "kubectl", args: ["apply", "-f", "fixture.yaml", "-l", "dsrd.workload=api", "--namespace", "race-debugger"], cwd: process.cwd() },
+      { command: "kubectl", args: ["apply", "-f", "fixture.yaml", "-l", "dsrd.workload=postgres", "--namespace", "race-debugger"], cwd: process.cwd() },
+      { command: "kubectl", args: ["apply", "-f", "fixture.yaml", "-l", "dsrd.workload=migrate", "--namespace", "race-debugger"], cwd: process.cwd() },
     ]);
   });
 });

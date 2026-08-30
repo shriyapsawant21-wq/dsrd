@@ -82,11 +82,11 @@ Blockers: none
 Next checkpoint: C7
 
 ## C7 — Kubernetes adapter
-Status: in progress
+Status: blocked
 Owner: Riya, Shriya, Akil
-Evidence: Implemented: optional Kubernetes ExecutionPlatform discovery, schedule validation, reset/run/replay delegation, kubectl client-side discovery, and fake-executor tests. Fresh local kind verification applied fixtures/kubernetes-startup-race/manifest.yaml; Deployment and StatefulSet rolled out, Job completed, and the disposable namespace deleted successfully.
+Evidence: Implemented: optional Kubernetes ExecutionPlatform discovery for Deployments, StatefulSets, and Jobs; manifest-scoped reset/replay; and per-workload, label-selected startup application verified by `npx vitest run packages/runtime/test/kubernetes-platform.test.ts` (4 passed). Fresh local Kind verification created the fixture namespace, applied Deployment, StatefulSet, and Job separately, listed the resources, and deleted the disposable namespace.
 Commit/PR: feat/kubernetes-adapter
-Remaining work: wire per-workload scheduled Kubernetes execution, resource-state/log collection, and the proof observer; then record normal startup, a discovered failure, minimized schedule, and deterministic replay evidence.
-Dependencies: local kind cluster ready.
-Blockers: none
+Remaining work: Akil must select `TargetConfig.platform: "kubernetes"` in generic scheduler discovery/replay; Shriya must provide the Kubernetes resource-state/log collector and proof observer; then the team must verify normal startup, discovered failure, minimization, artifact, and deterministic replay.
+Dependencies: local kind-dsrd-c7 cluster ready; awaiting Akil generic scheduler integration and Shriya proof/evidence output.
+Blockers: Akil scheduler integration and Shriya Kubernetes proof/evidence adapter are not implemented on this branch; per ownership rules, Riya must not invent replacements.
 Next checkpoint: C7

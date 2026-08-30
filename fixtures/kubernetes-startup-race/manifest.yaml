@@ -2,12 +2,16 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: dsrd-kubernetes-race
+  labels:
+    dsrd.infrastructure: namespace
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api
   namespace: dsrd-kubernetes-race
+  labels:
+    dsrd.workload: api
 spec:
   replicas: 1
   selector:
@@ -28,6 +32,8 @@ kind: StatefulSet
 metadata:
   name: database
   namespace: dsrd-kubernetes-race
+  labels:
+    dsrd.workload: database
 spec:
   serviceName: database
   replicas: 1
@@ -49,6 +55,8 @@ kind: Job
 metadata:
   name: migrate
   namespace: dsrd-kubernetes-race
+  labels:
+    dsrd.workload: migrate
 spec:
   template:
     spec:

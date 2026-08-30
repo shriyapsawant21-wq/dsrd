@@ -77,11 +77,15 @@ export class KubectlKubernetesExecutor implements KubernetesScheduleExecutor {
 
   async runSchedule(schedule: Schedule, _workloadOrder: string[]): Promise<RunResult> {
     await this.resetNamespace();
-    const delayMs = Math.max(0, ...schedule.perturbations
+    await this.applySelector("dsrd.infrastructure=namespace");
+    const startDelays = new Map(schedule.perturbations
       .filter((perturbation) => perturbation.phase === "start")
-      .map((perturbation) => perturbation.delayMs));
-    if (delayMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
-    await this.runKubectl(["apply", "-f", this.options.target.manifestPath, ...this.namespaceArgs()]);
+      .map((perturbation) => [perturbation.workloadId, perturbation.delayMs]));
+    for (const workloadId of _workloadOrder) {
+      const delayMs = startDelays.get(workloadId) ?? 0;
+      if (delayMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+      await this.applySelector(`dsrd.workload=${workloadId}`);
+    }
     return this.options.evaluate(schedule.id);
   }
 
@@ -98,6 +102,12 @@ export class KubectlKubernetesExecutor implements KubernetesScheduleExecutor {
     if (result.exitCode !== 0) {
       throw new Error(`kubectl ${args[0]} failed: ${result.stderr || `exit code ${result.exitCode}`}`);
     }
+  }
+
+  private async applySelector(selector: string): Promise<void> {
+    await this.runKubectl([
+      "apply", "-f", this.options.target.manifestPath, "-l", selector, ...this.namespaceArgs(),
+    ]);
   }
 
   private namespaceArgs(): string[] {
