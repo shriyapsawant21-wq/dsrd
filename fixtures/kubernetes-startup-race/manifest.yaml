@@ -21,6 +21,7 @@ spec:
     metadata:
       labels:
         app: api
+        dsrd.workload: api
     spec:
       containers:
         - name: api
@@ -44,6 +45,7 @@ spec:
     metadata:
       labels:
         app: database
+        dsrd.workload: database
     spec:
       containers:
         - name: database
@@ -74,6 +76,9 @@ metadata:
 spec:
   backoffLimit: 0
   template:
+    metadata:
+      labels:
+        dsrd.workload: migrate
     spec:
       restartPolicy: Never
       containers:

@@ -137,6 +137,44 @@ describe("KubectlKubernetesExecutor", () => {
     })]);
   });
 
+  it("reports a running pod that is not Ready as unhealthy evidence", async () => {
+    const runner = new RecordingRunner();
+    runner.run = async (invocation) => {
+      runner.invocations.push(invocation);
+      if (invocation.args[0] === "get") {
+        return {
+          stdout: JSON.stringify({ items: [{
+            metadata: { labels: { "dsrd.workload": "api" } },
+            status: {
+              phase: "Running",
+              conditions: [{ type: "Ready", status: "False", reason: "ContainersNotReady" }],
+              containerStatuses: [{ state: { running: {} } }],
+            },
+          }] }),
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+    const observed: unknown[] = [];
+    const executor = new KubectlKubernetesExecutor({
+      target: { platform: "kubernetes", manifestPath: "fixture.yaml", namespace: "race-debugger" },
+      runner,
+      observer: { evaluate: async (snapshot) => {
+        observed.push(snapshot);
+        return { scheduleId: snapshot.scheduleId, status: "fail", events: [], logs: [] };
+      } },
+    });
+
+    await executor.runSchedule({ id: "unready-api", perturbations: [] }, ["api"]);
+
+    expect(observed).toEqual([expect.objectContaining({
+      states: [expect.objectContaining({ workload: "api", state: "running", health: "unhealthy" })],
+      events: [expect.objectContaining({ workload: "api", event: "readiness_unhealthy" })],
+    })]);
+  });
+
   it("resets manifest-scoped resources and applies each workload separately through kubectl", async () => {
     const runner = new RecordingRunner();
     const executor = new KubectlKubernetesExecutor({

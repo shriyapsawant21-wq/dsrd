@@ -5,7 +5,7 @@ import { WorkloadProofObserver, type WorkloadProofObserverOptions } from "./runt
 export type KubernetesObservation = {
   scheduleId: string;
   startedAtMs: number;
-  states: Array<{ workload: string; state: "running" | "exited" | "missing"; exitCode?: number; observedAtMs: number }>;
+  states: Array<{ workload: string; state: "running" | "exited" | "missing"; exitCode?: number; health?: string; observedAtMs: number }>;
   logs: string[];
   events: Array<{ workload: string; timeMs: number; event: string; detail?: string }>;
 };

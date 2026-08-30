@@ -77,7 +77,7 @@ race-debugger search --platform compose --target fixtures/startup-race/compose.y
 race-debugger replay failure.json
 ```
 
-The production CLI routes local-process targets to the local runtime and Compose targets to the Docker Compose runtime. Kubernetes targets return a clear unsupported message until C7 is integrated.
+The production CLI routes local-process targets to the local runtime, Compose targets to the Docker Compose runtime, and Kubernetes targets to the optional `kubectl` adapter.
 
 ### PowerShell and POSIX replay hints
 
