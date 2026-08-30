@@ -38,9 +38,11 @@ describe("desktop window policy", () => {
     expect(rootPackage.scripts["dev:desktop"]).toContain("@dsrd/api");
     expect(rootPackage.scripts["dev:desktop"]).toContain("@dsrd/desktop");
     expect(desktopPackage.scripts.dev).toContain("@dsrd/web");
-    expect(desktopPackage.scripts.dev).toContain("ELECTRON_RUN_AS_NODE=");
+    expect(desktopPackage.scripts.dev).toContain("127.0.0.1:5174");
+    expect(desktopPackage.scripts.dev).toContain("--port 5174");
+    expect(desktopPackage.scripts.dev).not.toContain("127.0.0.1:5173");
+    expect(desktopPackage.scripts.dev).toContain("node dist/launcher.js");
     expect(desktopPackage.main).toBe("dist/main.cjs");
-    expect(desktopPackage.scripts.dev).toContain("electron dist/main.cjs");
     expect(apiPackage.exports["./server"].types).toBe("./src/server.ts");
     expect(mainSource).toContain('require("electron")');
   });

@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "dev": "concurrently -k -s first \"npm run dev --workspace=@dsrd/web -- --host 127.0.0.1 --strictPort\" \"wait-on http-get://127.0.0.1:5173 && cross-env ELECTRON_RUN_AS_NODE= DSRD_RENDERER_URL=http://127.0.0.1:5173 electron dist/main.cjs\""
+    "dev": "concurrently -k -s first \"npm run dev --workspace=@dsrd/web -- --host 127.0.0.1 --port 5174 --strictPort\" \"wait-on http-get://127.0.0.1:5174 && cross-env DSRD_RENDERER_URL=http://127.0.0.1:5174 node dist/launcher.js\""
   },
   "dependencies": {
     "@dsrd/api": "0.1.0"
