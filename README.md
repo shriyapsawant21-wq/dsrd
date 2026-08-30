@@ -37,6 +37,7 @@ This is a dynamic debugger, not an AI log summarizer or static Compose linter.
 ### Interactive dashboard
 
 Run `race-debugger` with no command from a terminal to open the DSRD dashboard and choose Search, Replay, or Quit.
+The guided search uses numbered Docker Compose/local-process choices, validates the selected file, and offers a recommended Quick scan that tests one perturbation at a time. Choose Thorough scan only when you intentionally want the larger Cartesian search.
 
 ### Scriptable commands
 
