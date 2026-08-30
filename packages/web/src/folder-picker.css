@@ -1,0 +1,6 @@
+.selected-folder {
+  margin: 0.75rem 0 0;
+  color: var(--pink);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+}

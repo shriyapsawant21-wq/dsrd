@@ -1,17 +1,17 @@
 import type { RunPhase } from "./contracts.js";
-import type { FailureArtifact } from "@dsrd/contracts";
+import type { FailureArtifact, TargetConfig } from "@dsrd/contracts";
 import { RunStore } from "./run-store.js";
 
-export type DiscoveryRunner = (composeFile: string, onProgress: (testedSchedules: number, totalSchedules: number) => void) => Promise<
+export type DiscoveryRunner = (target: TargetConfig, onProgress: (testedSchedules: number, totalSchedules: number) => void) => Promise<
   | { status: "completed"; artifact?: FailureArtifact; testedSchedules?: number }
   | { status: "no_failure"; testedSchedules?: number }
 >;
 export class RunService {
   constructor(private readonly store: RunStore, private readonly discover: DiscoveryRunner) {}
-  async start(runId: string, composeFile: string): Promise<void> {
+  async start(runId: string, target: TargetConfig): Promise<void> {
     this.store.publish(runId, { ...this.require(runId).progress, phase: "exploring", percentage: 10, message: "Exploring schedules" });
     try {
-      const result = await this.discover(composeFile, (testedSchedules, totalSchedules) => {
+      const result = await this.discover(target, (testedSchedules, totalSchedules) => {
         const percentage = Math.min(90, 10 + Math.round((testedSchedules / Math.max(1, totalSchedules)) * 80));
         this.store.publish(runId, { ...this.require(runId).progress, phase: "exploring", percentage, message: "SCANNING_SCHEDULES", testedSchedules });
       });

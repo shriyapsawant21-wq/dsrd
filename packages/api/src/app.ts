@@ -1,10 +1,8 @@
 import express from "express";
 import multer from "multer";
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { RunService } from "./run-service.js";
 import { RunStore } from "./run-store.js";
+import { materializeProject } from "./project-upload.js";
 import type { FailureArtifact } from "@dsrd/contracts";
 
 function summarizeFailures(artifact?: FailureArtifact) {
@@ -13,18 +11,21 @@ function summarizeFailures(artifact?: FailureArtifact) {
   return [{ id: "failure-1", name: (event?.event ?? "startup_race").toUpperCase(), severity: "critical", reason: artifact.expectedFailureReason ?? "Startup race discovered" }];
 }
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2_000_000 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2_000_000, files: 200 } });
 export function createApp(store: RunStore, service: RunService) {
   const app = express();
-  app.post("/api/runs", upload.single("composeFile"), async (req, res) => {
-    const file = req.file;
-    if (!file || !/\.ya?ml$/i.test(file.originalname)) return res.status(400).json({ error: "A Compose YAML file is required" });
-    const directory = await mkdtemp(join(tmpdir(), "dsrd-web-run-"));
-    const composePath = join(directory, /\.yml$/i.test(file.originalname) ? "compose.yml" : "compose.yaml");
-    await writeFile(composePath, file.buffer);
-    const run = store.create();
-    void service.start(run.id, composePath);
-    return res.status(202).json({ runId: run.id, status: "queued" });
+  app.post("/api/runs", upload.array("projectFiles", 200), async (req, res) => {
+    try {
+      if (!Array.isArray(req.files) || req.files.length === 0) {
+        return res.status(400).json({ error: "Select a project folder containing one Compose file" });
+      }
+      const { target } = await materializeProject(req.files, req.body.relativePaths);
+      const run = store.create();
+      void service.start(run.id, target);
+      return res.status(202).json({ runId: run.id, status: "queued" });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid project upload" });
+    }
   });
   app.get("/api/runs/:runId", (req, res) => {
     const run = store.get(req.params.runId);
@@ -55,6 +56,10 @@ export function createApp(store: RunStore, service: RunService) {
     if (!run) return res.status(404).json({ error: "Run not found" });
     if (!run.artifact || req.params.failureId !== "failure-1") return res.status(404).json({ error: "Failure not found" });
     return res.json({ id: "failure-1", reason: run.artifact.expectedFailureReason ?? "Startup race discovered", severity: "critical", originalSchedule: run.artifact.originalSchedule, minimizedSchedule: run.artifact.minimizedSchedule, events: run.artifact.events });
+  });
+  app.use((error: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (error instanceof multer.MulterError) return res.status(400).json({ error: "Invalid project upload" });
+    return next(error);
   });
   return app;
 }

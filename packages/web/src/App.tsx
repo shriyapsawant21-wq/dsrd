@@ -5,6 +5,7 @@ import { getLogoMotion } from "./logo-motion";
 import { getDemoFailureDetail, getReportFailures } from "./report-data";
 import { getInitialTheme, toggleTheme, type Theme } from "./theme";
 import { ScrollCue } from "./ScrollCue";
+import "./folder-picker.css";
 
 type Screen = "landing" | "exploring" | "report" | "detail" | "no_failure" | "error";
 const initialProgress: Progress = { runId: "", phase: "queued", percentage: 0, message: "INITIALIZING", testedSchedules: 0, failureCount: 0 };
@@ -13,6 +14,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("landing"); const [progress, setProgress] = useState(initialProgress);
   const [run, setRun] = useState<RunRecord>(); const [detail, setDetail] = useState<FailureDetail>(); const [error, setError] = useState("");
   const [theme, setTheme] = useState<Theme>(() => getInitialTheme(localStorage.getItem("dsrd-theme")));
+  const [selectedFolder, setSelectedFolder] = useState("");
   const [dragging, setDragging] = useState(false); const input = useRef<HTMLInputElement>(null); const movingLogo = useRef<HTMLImageElement>(null);
   useLayoutEffect(() => {
     let frame = 0;
@@ -26,10 +28,11 @@ export default function App() {
     window.addEventListener("scroll", schedulePosition, { passive: true }); window.addEventListener("resize", schedulePosition);
     return () => { cancelAnimationFrame(frame); window.removeEventListener("scroll", schedulePosition); window.removeEventListener("resize", schedulePosition); };
   }, [screen]);
-  const start = async (file?: File) => {
-    if (!file) return; if (!/\.ya?ml$/i.test(file.name)) { setError("SELECT_A_COMPOSE_YAML_FILE"); return; }
+  const start = async (files?: Iterable<File>) => {
+    const projectFiles = files ? [...files] : [];
+    if (projectFiles.length === 0) { setError("SELECT_A_COMPOSE_PROJECT_FOLDER"); return; }
     try {
-      const { runId } = await createRun(file); setProgress({ ...initialProgress, runId, phase: "exploring", message: "SCANNING_NODES", percentage: 4 }); setScreen("exploring");
+      const { runId } = await createRun(projectFiles); setProgress({ ...initialProgress, runId, phase: "exploring", message: "SCANNING_NODES", percentage: 4 }); setScreen("exploring");
       const close = subscribeRun(runId, async (next) => {
         setProgress(next);
         if (["completed", "no_failure", "error"].includes(next.phase)) {
@@ -39,8 +42,14 @@ export default function App() {
       }, () => { setError("CONNECTION_TO_DEBUG_CORE_LOST"); setScreen("error"); });
     } catch (cause) { setError(cause instanceof Error ? cause.message : "UPLOAD_FAILED"); }
   };
+  const selectProject = (files?: FileList | null) => {
+    if (!files?.length) return;
+    const first = files[0] as File & { webkitRelativePath?: string };
+    setSelectedFolder((first.webkitRelativePath || first.name).split(/[\\/]/)[0]);
+    void start(files);
+  };
   const openDetail = async (failureId: string) => { if (!run) return; try { setDetail(await getFailure(run.id, failureId)); } catch { setDetail(getDemoFailureDetail()); } setScreen("detail"); };
-  const reset = () => { window.scrollTo({ top: 0, behavior: "auto" }); setScreen("landing"); setRun(undefined); setDetail(undefined); setError(""); };
+  const reset = () => { window.scrollTo({ top: 0, behavior: "auto" }); setScreen("landing"); setRun(undefined); setDetail(undefined); setSelectedFolder(""); setError(""); };
   const reportFailures = getReportFailures(run?.failures);
   const switchTheme = () => { const next = toggleTheme(theme); localStorage.setItem("dsrd-theme", next); setTheme(next); };
   return <div className="app" data-theme={theme}>
@@ -48,7 +57,7 @@ export default function App() {
     {screen === "landing" && <main>
       <img ref={movingLogo} src="/dsrd-logo.png" className="moving-logo" alt="DSRD"/>
       <section className="hero"><ScrollCue/></section>
-      <section className="upload-section"><div className="section-title">[ INITIALIZE_SEQUENCE ]</div><button className={`drop-zone ${dragging ? "dragging" : ""}`} onClick={() => input.current?.click()} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); void start(e.dataTransfer.files[0]); }}><span className="corner">IN</span><Upload size={38} strokeWidth={2.4}/><strong>DRAG_AND_DROP_COMPOSE_FILE</strong><span>OR_CLICK_TO_BROWSE</span><small>SUPPORTED_FORMATS: .YAML, .YML</small></button><input ref={input} className="sr-only" aria-label="Compose file" type="file" accept=".yaml,.yml" onChange={(e) => void start(e.target.files?.[0])}/>{error && <p className="inline-error">{error}</p>}<p className="constraint">SELF-CONTAINED COMPOSE FILES ONLY // LOCAL BUILD CONTEXTS REQUIRE COMPANION FILE SUPPORT</p></section>
+      <section className="upload-section"><div className="section-title">[ INITIALIZE_SEQUENCE ]</div><button className={`drop-zone ${dragging ? "dragging" : ""}`} onClick={() => input.current?.click()} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); selectProject(e.dataTransfer.files); }}><span className="corner">IN</span><Upload size={38} strokeWidth={2.4}/><strong>SELECT_PROJECT_FOLDER</strong><span>OR_DRAG_AND_DROP_PROJECT_FILES</span><small>INCLUDES_SOURCE_DOCKERFILES_AND_CONFIG</small></button><input ref={input} className="sr-only" aria-label="Project folder" type="file" multiple {...({ webkitdirectory: "", directory: "" } as Record<string, string>)} onChange={(e) => selectProject(e.target.files)}/>{selectedFolder && <p className="selected-folder">PROJECT: {selectedFolder}</p>}{error && <p className="inline-error">{error}</p>}<p className="constraint">SELECT A PROJECT FOLDER // RELATIVE BUILD CONTEXTS ARE PRESERVED</p></section>
     </main>}
     {screen === "exploring" && <main className="screen exploring"><h1>EXPLORING<span className="blink">..._</span></h1><div className="progress-meta"><span>{progress.message}</span><span>{progress.percentage}%</span></div><div className="progress-track"><div style={{ width: `${progress.percentage}%` }}/></div><div className="system-row"><span>SYS_MEM: 0x7F8C4B</span><span>TESTED: {String(progress.testedSchedules).padStart(3,"0")}</span></div><div className="failure-count">FAILURES: {String(progress.failureCount).padStart(2,"0")}</div></main>}
     {screen === "report" && <main className="screen report"><h2>FAILURES: {String(reportFailures.length).padStart(2,"0")}</h2><div className="failure-table" role="table"><div className="row heading"><span>FAILURE_NAME</span><span>SEVERITY</span></div>{reportFailures.map((failure) => <button className="row" key={failure.id} onClick={() => void openDetail(failure.id)}><span>[{failure.name}]</span><span>{failure.severity.toUpperCase()}</span></button>)}</div><a className="export" href={`/api/runs/${run?.id}/report`} download><Download size={14}/> EXPORT_REPORT</a></main>}
