@@ -14,10 +14,46 @@ it("rejects a non-Compose upload", async () => {
 it("returns an uploaded run and reports that an unfinished artifact is unavailable", async () => {
   const store = new RunStore();
   const app = createApp(store, new RunService(store, async () => new Promise(() => undefined)));
-  const created = await request(app).post("/api/runs").attach("composeFile", Buffer.from("services: {}"), "compose.yaml");
+  const created = await request(app)
+    .post("/api/runs")
+    .field("relativePaths", JSON.stringify(["demo/compose.yaml"]))
+    .attach("projectFiles", Buffer.from("services: {}"), "compose.yaml");
   expect(created.status).toBe(202);
   expect((await request(app).get(`/api/runs/${created.body.runId}`)).status).toBe(200);
   expect((await request(app).get(`/api/runs/${created.body.runId}/report`)).status).toBe(409);
+});
+
+it("starts the existing run service from a materialized project folder", async () => {
+  const store = new RunStore();
+  let receivedComposeFile = "";
+  const app = createApp(store, new RunService(store, async (composeFile) => {
+    receivedComposeFile = composeFile;
+    return { status: "no_failure" };
+  }));
+
+  const created = await request(app)
+    .post("/api/runs")
+    .field("relativePaths", JSON.stringify(["demo/compose.yaml", "demo/Dockerfile"]))
+    .attach("projectFiles", Buffer.from("services: { api: { build: . } }"), "compose.yaml")
+    .attach("projectFiles", Buffer.from("FROM node:20-alpine"), "Dockerfile");
+
+  expect(created.status).toBe(202);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(receivedComposeFile).toMatch(/demo[\\/]compose\.yaml$/);
+});
+
+it("rejects a folder upload before creating a run when no Compose file exists", async () => {
+  const store = new RunStore();
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })));
+
+  const response = await request(app)
+    .post("/api/runs")
+    .field("relativePaths", JSON.stringify(["demo/Dockerfile"]))
+    .attach("projectFiles", Buffer.from("FROM node:20-alpine"), "Dockerfile");
+
+  expect(response.status).toBe(400);
+  expect(response.body.error).toBe("No Compose file found in project folder");
+  expect(store.get("run-1")).toBeUndefined();
 });
 
 it("returns 404 for an unknown run", async () => {
