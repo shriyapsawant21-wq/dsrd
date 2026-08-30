@@ -1,0 +1,71 @@
+{
+  "version": 2,
+  "createdAt": "2026-08-30T11:44:06.027Z",
+  "target": {
+    "platform": "compose",
+    "composeFile": "/home/xtrmn8/dsrd-tests/dsrd-compose-test/mvp-distributed/compose.yaml"
+  },
+  "originalSchedule": {
+    "id": "quick-001",
+    "perturbations": [
+      {
+        "workloadId": "api",
+        "phase": "start",
+        "delayMs": 2500
+      }
+    ]
+  },
+  "minimizedSchedule": {
+    "id": "quick-001-minimized",
+    "perturbations": [
+      {
+        "workloadId": "api",
+        "phase": "start",
+        "delayMs": 2500
+      }
+    ]
+  },
+  "expectedFailureReason": "Dependency was not ready (audit)",
+  "events": [
+    {
+      "timeMs": 0,
+      "service": "api",
+      "event": "scheduled_start_delay",
+      "detail": "2500ms"
+    },
+    {
+      "timeMs": 3252,
+      "service": "api",
+      "event": "workload_running"
+    },
+    {
+      "timeMs": 3252,
+      "service": "audit",
+      "event": "startup_failed",
+      "detail": "api was not ready"
+    },
+    {
+      "timeMs": 3252,
+      "service": "audit",
+      "event": "workload_exited",
+      "detail": "exit code 1"
+    },
+    {
+      "timeMs": 3252,
+      "service": "bootstrap",
+      "event": "workload_exited",
+      "detail": "exit code 0"
+    },
+    {
+      "timeMs": 3253,
+      "service": "api",
+      "event": "service_ready"
+    },
+    {
+      "timeMs": 3254,
+      "service": "bootstrap",
+      "event": "dependency_ready",
+      "detail": "ready after 0ms"
+    }
+  ]
+}
