@@ -54,6 +54,26 @@ Raw search durations:
 
 The Compose timing is dominated by Docker lifecycle work, not scheduler decision time. Its timeline consistently showed `audit` failing before the delayed `api` became ready; the local timeline consistently showed `api` exiting before `bootstrap` emitted readiness.
 
+## Full Local + Compose demo-matrix benchmark
+
+On 2026-08-31, the same automated protocol was run against every supported
+demo in `/home/xtrmn8/dsrd-tests`: five Local Process fixtures and five Docker
+Compose fixtures. Each result below includes a passing normal control,
+automatic discovery, minimization to a non-empty schedule, artifact creation,
+and a physical replay.
+
+| Platform | Fixtures passed | Discovery/replay rate | Total elapsed time |
+| --- | ---: | ---: | ---: |
+| Local Process | 5/5 | 5/5 discovery, 5/5 replay | 9.266 s |
+| Docker Compose | 5/5 | 5/5 discovery, 5/5 replay | 196.758 s |
+| **Supported matrix total** | **10/10** | **10/10 discovery, 10/10 replay** | **206.024 s** |
+
+The local fixtures completed in 1.029–2.413 s each. Compose took 11.787–63.333
+s each because each experiment resets and tears down real Docker resources;
+that cost is runtime lifecycle work, not a manual diagnosis step. The complete
+local-only result file is retained at
+`/home/xtrmn8/dsrd-tests/benchmark-results/local-compose-benchmark.json`.
+
 Artifacts retained as benchmark evidence:
 
 - `local-algorithm-run1.failure.json` through `local-algorithm-run3.failure.json`
