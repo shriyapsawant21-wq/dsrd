@@ -1,0 +1,24 @@
+{
+  "name": "@dsrd/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "node --enable-source-maps dist/main.js"
+  },
+  "dependencies": {
+    "@dsrd/contracts": "0.1.0",
+    "@dsrd/proof": "0.1.0",
+    "@dsrd/runtime": "0.1.0",
+    "@dsrd/scheduler": "0.1.0",
+    "express": "^5.1.0",
+    "multer": "^2.0.2"
+  },
+  "devDependencies": {
+    "@types/multer": "^2.2.0",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.2.2"
+  }
+}
