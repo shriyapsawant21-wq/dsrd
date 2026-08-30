@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   DockerRuntimeController,
+  RunTimeoutError,
   type ComposeRuntime,
   type Delay,
   type ObservationSnapshot,
@@ -59,6 +60,126 @@ class RecordingDelay implements Delay {
   }
 }
 
+class BlockingDelay implements Delay {
+  private releaseDelay?: () => void;
+
+  async wait(delayMs: number): Promise<void> {
+    if (delayMs === 100) {
+      await new Promise<void>((resolve) => {
+        this.releaseDelay = resolve;
+      });
+    }
+  }
+
+  release(): void {
+    this.releaseDelay?.();
+  }
+}
+
+class BlockingStartCompose extends RecordingCompose {
+  private resolveStartEntered?: () => void;
+  private resolveStart?: () => void;
+  private readonly startEntered = new Promise<void>((resolve) => {
+    this.resolveStartEntered = resolve;
+  });
+
+  override async startService(service: string): Promise<void> {
+    this.actions.push(`start:${service}`);
+    if (service === "api") {
+      this.resolveStartEntered?.();
+      await new Promise<void>((resolve) => {
+        this.resolveStart = resolve;
+      });
+      this.actions.push(`started:${service}`);
+    }
+  }
+
+  waitForStart(): Promise<void> {
+    return this.startEntered;
+  }
+
+  releaseStart(): void {
+    this.resolveStart?.();
+  }
+}
+
+class BlockingLogsCompose extends RecordingCompose {
+  private resolveLogsEntered?: () => void;
+  private resolveLogs?: () => void;
+  private readonly logsEntered = new Promise<void>((resolve) => {
+    this.resolveLogsEntered = resolve;
+  });
+
+  override async collectLogs(): Promise<string[]> {
+    this.actions.push("logs");
+    this.resolveLogsEntered?.();
+    await new Promise<void>((resolve) => {
+      this.resolveLogs = resolve;
+    });
+    return [];
+  }
+
+  waitForLogs(): Promise<void> {
+    return this.logsEntered;
+  }
+
+  releaseLogs(): void {
+    this.resolveLogs?.();
+  }
+}
+
+class AbortableRefreshCompose extends RecordingCompose {
+  private logCalls = 0;
+  private releaseRefresh?: () => void;
+  private resolveRefreshStarted?: () => void;
+  private readonly refreshStarted = new Promise<void>((resolve) => {
+    this.resolveRefreshStarted = resolve;
+  });
+  refreshSignal?: AbortSignal;
+
+  override async collectLogs(signal?: AbortSignal): Promise<string[]> {
+    this.actions.push("logs");
+    this.logCalls += 1;
+    if (this.logCalls === 1) {
+      return [];
+    }
+    this.refreshSignal = signal;
+    this.resolveRefreshStarted?.();
+    await new Promise<void>((resolve) => {
+      this.releaseRefresh = resolve;
+    });
+    throw signal?.reason;
+  }
+
+  waitForRefresh(): Promise<void> {
+    return this.refreshStarted;
+  }
+
+  release(): void {
+    this.releaseRefresh?.();
+  }
+}
+
+class AbortableStartCompose extends RecordingCompose {
+  override async startService(
+    service: string,
+    options?: { includeDependencies?: boolean; signal?: AbortSignal },
+  ): Promise<void> {
+    this.actions.push(`start:${service}`);
+    await new Promise<void>((_resolve, reject) => {
+      const signal = options?.signal;
+      if (signal === undefined) {
+        return;
+      }
+      if (signal.aborted) {
+        reject(signal.reason);
+        return;
+      }
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
+  }
+}
+
 class RecordingObserver implements RunObserver {
   snapshot?: ObservationSnapshot;
 
@@ -109,10 +230,10 @@ describe("DockerRuntimeController", () => {
     expect(compose.actions).toEqual([
       "reset",
       "wait:100",
-      "start:postgres",
       "wait:0",
-      "start:api",
       "wait:25",
+      "start:postgres",
+      "start:api",
       "start:worker",
       "logs",
       "ps",
@@ -124,6 +245,238 @@ describe("DockerRuntimeController", () => {
       services: [],
     });
     expect(observer.snapshot?.refresh).toBeTypeOf("function");
+  });
+
+  it("starts un-delayed services before a delayed service becomes startable", async () => {
+    const compose = new RecordingCompose();
+    const delay = new BlockingDelay();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay,
+      observer: new RecordingObserver(),
+    });
+
+    const run = controller.runSchedule({
+      id: "delay-postgres",
+      perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
+    }, ["postgres", "api", "worker"]);
+
+    await vi.waitFor(() => {
+      expect(compose.actions).toEqual(expect.arrayContaining(["start:api", "start:worker"]));
+    });
+    expect(compose.actions).not.toContain("start:postgres");
+
+    delay.release();
+    await run;
+  });
+
+  it("cancels a delayed independent start when a sibling start fails", async () => {
+    const compose = new RecordingCompose();
+    compose.failStartFor = "api";
+    const delay = new BlockingDelay();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay,
+      observer: new RecordingObserver(),
+    });
+
+    await expect(controller.runSchedule({
+      id: "failed-api-before-postgres",
+      perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
+    }, ["api", "postgres"])).rejects.toThrow("cannot start api");
+
+    delay.release();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(compose.actions).not.toContain("start:postgres");
+    expect(compose.actions.at(-1)).toBe("stop");
+  });
+
+  it("cancels a delayed independent start when the run times out", async () => {
+    const compose = new RecordingCompose();
+    const delay = new BlockingDelay();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay,
+      observer: new RecordingObserver(),
+      runTimeoutMs: 10,
+    });
+
+    await expect(controller.runSchedule({
+      id: "timed-out-before-postgres",
+      perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
+    }, ["postgres"])).rejects.toBeInstanceOf(RunTimeoutError);
+
+    delay.release();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(compose.actions).not.toContain("start:postgres");
+    expect(compose.actions.at(-1)).toBe("stop");
+  });
+
+  it("waits for an in-flight independent start before timeout cleanup", async () => {
+    const compose = new BlockingStartCompose();
+    const delay = new BlockingDelay();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay,
+      observer: new RecordingObserver(),
+      runTimeoutMs: 10,
+    });
+    const run = controller.runSchedule({
+      id: "timed-out-during-api-start",
+      perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
+    }, ["api", "postgres"]);
+    const runFailure = run.catch((error: unknown) => error);
+
+    await compose.waitForStart();
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    try {
+      expect(compose.actions).not.toContain("stop");
+    } finally {
+      compose.releaseStart();
+    }
+    await expect(runFailure).resolves.toBeInstanceOf(RunTimeoutError);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(compose.actions).toEqual(["reset", "start:api", "started:api", "stop"]);
+  });
+
+  it("skips cleanup when an aborted Compose operation does not settle", async () => {
+    const compose = new BlockingStartCompose();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new BlockingDelay(),
+      observer: new RecordingObserver(),
+      runTimeoutMs: 10,
+      operationDrainTimeoutMs: 10,
+    });
+    const run = controller.runSchedule({
+      id: "non-closing-start",
+      perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
+    }, ["api", "postgres"]);
+    const failure = run.catch((error: unknown) => error);
+
+    await compose.waitForStart();
+    try {
+      const outcome = await Promise.race([
+        failure,
+        new Promise<"still-running">((resolve) => setTimeout(() => resolve("still-running"), 100)),
+      ]);
+      expect(outcome).toBeInstanceOf(AggregateError);
+      expect(compose.actions).not.toContain("stop");
+    } finally {
+      compose.releaseStart();
+    }
+  });
+
+  it("does not observe after a timed-out start settles", async () => {
+    const compose = new BlockingStartCompose();
+    const observer = new RecordingObserver();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer,
+      runTimeoutMs: 10,
+    });
+    const run = controller.runSchedule({
+      id: "timed-out-before-observation",
+      perturbations: [],
+    }, ["api"]);
+    const runFailure = run.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    await compose.waitForStart();
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    compose.releaseStart();
+    await expect(runFailure).resolves.toBeInstanceOf(RunTimeoutError);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(compose.actions).not.toContain("logs");
+    expect(compose.actions).not.toContain("ps");
+    expect(observer.snapshot).toBeUndefined();
+  });
+
+  it("does not continue observation when log collection outlives the timeout", async () => {
+    const compose = new BlockingLogsCompose();
+    const observer = new RecordingObserver();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer,
+      runTimeoutMs: 10,
+    });
+    const run = controller.runSchedule({
+      id: "timed-out-during-log-collection",
+      perturbations: [],
+    }, ["api"]);
+    const runFailure = run.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    await compose.waitForLogs();
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    expect(compose.actions).not.toContain("stop");
+    compose.releaseLogs();
+    await expect(runFailure).resolves.toBeInstanceOf(RunTimeoutError);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(compose.actions).not.toContain("ps");
+    expect(observer.snapshot).toBeUndefined();
+    expect(compose.actions.at(-1)).toBe("stop");
+  });
+
+  it("aborts an observer refresh before timeout cleanup", async () => {
+    vi.useFakeTimers();
+    const compose = new AbortableRefreshCompose();
+    const observer: RunObserver = {
+      evaluate: async (snapshot) => {
+        await snapshot.refresh?.();
+        return passingResult;
+      },
+    };
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer,
+      runTimeoutMs: 100,
+    });
+
+    const run = controller.runSchedule({ id: "refresh-stalled", perturbations: [] }, []);
+    const runFailure = run.catch((error: unknown) => error);
+    await compose.waitForRefresh();
+    try {
+      await vi.advanceTimersByTimeAsync(100);
+      expect(compose.refreshSignal?.aborted).toBe(true);
+      expect(compose.actions).not.toContain("stop");
+      compose.release();
+      const failure = await runFailure;
+      expect(failure).toBeInstanceOf(RunTimeoutError);
+      expect(compose.actions).toEqual(["reset", "logs", "ps", "logs", "stop"]);
+    } finally {
+      compose.release();
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts an in-flight Compose start before timeout cleanup", async () => {
+    const compose = new AbortableStartCompose();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer: new RecordingObserver(),
+      runTimeoutMs: 10,
+    });
+
+    const outcome = await Promise.race([
+      controller.runSchedule({
+        id: "timed-out-during-compose-start",
+        perturbations: [],
+      }, ["api"]).catch((error: unknown) => error),
+      new Promise<"still-running">((resolve) => setTimeout(() => resolve("still-running"), 50)),
+    ]);
+
+    expect(outcome).toBeInstanceOf(RunTimeoutError);
+    expect(compose.actions.at(-1)).toBe("stop");
   });
 
   it("stops the stack when a service fails to start", async () => {

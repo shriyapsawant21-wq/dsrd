@@ -3,7 +3,7 @@ import type {
   RunResult,
   Schedule,
   TargetConfig,
-  Workload
+  Workload,
 } from "@dsrd/contracts";
 
 import type { CommandInvocation, CommandRunner } from "./command-runner.js";
@@ -12,6 +12,7 @@ import { DockerCommandError } from "./docker-compose-client.js";
 export type ComposeServiceDefinition = {
   id: string;
   dependsOn?: string[];
+  kind?: Workload["kind"];
 };
 
 export interface ComposeServiceDiscovery {
@@ -43,10 +44,15 @@ export class DockerComposeServiceDiscovery implements ComposeServiceDiscovery {
     if (!this.hasServices(config)) {
       throw new Error("Compose config does not contain a services object");
     }
-    return Object.entries(config.services).map(([id, service]) => ({
-      id,
-      ...(this.dependsOn(service) === undefined ? {} : { dependsOn: this.dependsOn(service) })
-    }));
+    return Object.entries(config.services).map(([id, service]) => {
+      const dependsOn = this.dependsOn(service);
+      const kind = this.workloadKind(service);
+      return {
+        id,
+        ...(dependsOn === undefined ? {} : { dependsOn }),
+        ...(kind === undefined ? {} : { kind }),
+      };
+    });
   }
 
   private hasServices(config: unknown): config is { services: Record<string, unknown> } {
@@ -66,6 +72,20 @@ export class DockerComposeServiceDiscovery implements ComposeServiceDiscovery {
       return Object.keys(dependsOn);
     }
     return undefined;
+  }
+
+  private workloadKind(service: unknown): Workload["kind"] | undefined {
+    if (typeof service !== "object" || service === null || !("labels" in service)) {
+      return undefined;
+    }
+    const labels = service.labels;
+    if (typeof labels !== "object" || labels === null || Array.isArray(labels)) {
+      return undefined;
+    }
+    const kind = (labels as Record<string, unknown>)["dsrd.workload-kind"];
+    return kind === "service" || kind === "process" || kind === "job" || kind === "initializer"
+      ? kind
+      : undefined;
   }
 }
 
@@ -89,7 +109,7 @@ export class ComposeExecutionPlatform implements ExecutionPlatform {
     const services = await this.options.discovery.discoverServices(composeTarget);
     return services.map((service) => ({
       id: service.id,
-      kind: "service",
+      kind: service.kind ?? "service",
       ...(service.dependsOn === undefined ? {} : { dependsOn: service.dependsOn }),
       perturbablePhases: this.options.supportsReadinessDelay === true ? ["start", "ready"] : ["start"]
     }));

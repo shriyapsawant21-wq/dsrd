@@ -77,6 +77,25 @@ describe("DockerComposeClient lifecycle", () => {
     expect(runner.calls[0]?.args).toEqual(["compose", "up", "-d", "api"]);
   });
 
+  it("starts a controlled service without auto-starting its dependencies", async () => {
+    const runner = new RecordingRunner();
+    const client = new DockerComposeClient({ projectDirectory: "C:/fixture", runner });
+
+    await client.startService("api", { includeDependencies: false });
+
+    expect(runner.calls[0]?.args).toEqual(["compose", "up", "-d", "--no-deps", "api"]);
+  });
+
+  it("forwards a start cancellation signal to the command runner", async () => {
+    const runner = new RecordingRunner();
+    const client = new DockerComposeClient({ projectDirectory: "C:/fixture", runner });
+    const controller = new AbortController();
+
+    await client.startService("api", { signal: controller.signal });
+
+    expect(runner.calls[0]?.signal).toBe(controller.signal);
+  });
+
   it("rejects unsafe service names before invoking Docker", async () => {
     const runner = new RecordingRunner();
     const client = new DockerComposeClient({ projectDirectory: "C:/fixture", runner });
@@ -121,6 +140,20 @@ describe("DockerComposeClient lifecycle", () => {
     expect(runner.calls[0]?.args).toEqual(["compose", "logs", "--no-color"]);
   });
 
+  it("forwards observation cancellation signals to Compose queries", async () => {
+    const runner = new RecordingRunner({ stdout: "", stderr: "", exitCode: 0 });
+    const client = new DockerComposeClient({ projectDirectory: "C:/fixture", runner });
+    const controller = new AbortController();
+
+    await client.collectLogs(controller.signal);
+    await client.listServices(controller.signal);
+
+    expect(runner.calls.map((call) => call.signal)).toEqual([
+      controller.signal,
+      controller.signal,
+    ]);
+  });
+
   it("parses Compose service metadata from JSON arrays", async () => {
     const runner = new RecordingRunner({
       stdout: JSON.stringify([
@@ -138,7 +171,7 @@ describe("DockerComposeClient lifecycle", () => {
       { service: "api", state: "running", exitCode: 0, health: "healthy" },
       { service: "worker", state: "exited", exitCode: 1 }
     ]);
-    expect(runner.calls[0]?.args).toEqual(["compose", "ps", "--format", "json"]);
+    expect(runner.calls[0]?.args).toEqual(["compose", "ps", "--all", "--format", "json"]);
   });
 
   it("parses Compose service metadata from JSON lines", async () => {
@@ -157,4 +190,3 @@ describe("DockerComposeClient lifecycle", () => {
     ]);
   });
 });
-

@@ -77,4 +77,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    labels:
+      dsrd.workload-kind: job
     restart: "no"

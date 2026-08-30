@@ -52,13 +52,13 @@ Blockers: none
 Next checkpoint: C4
 
 ## C4 — Compose discovery
-Status: blocked
+Status: complete
 Owner: Akil, Riya, Shriya
-Evidence: no generic Compose integration run yet
-Commit/PR: none
-Remaining work: prove baseline pass and automatic real failure discovery
-Dependencies: C1, C2, C3
-Blockers: component migrations not complete
+Evidence: Implemented: normal pass and automatic generic Compose failure discovery verified; moving to C5. Fresh `npm test && npm run build && npm run typecheck` passed (22 test files, 83 tests); the real Compose integration test verified minimized delayed-Postgres failure timeline evidence.
+Commit/PR: feat/generic-compose-integration
+Remaining work: none
+Dependencies: ready
+Blockers: none
 Next checkpoint: C5
 
 ## C5 — Minimized artifact and replay

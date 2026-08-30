@@ -11,9 +11,12 @@ import type { ReadinessDelayAdapter } from "./readiness-delay.js";
 
 export interface ComposeRuntime {
   resetStack(): Promise<void>;
-  startService(service: string): Promise<void>;
-  collectLogs(): Promise<string[]>;
-  listServices(): Promise<ComposeServiceState[]>;
+  startService(
+    service: string,
+    options?: { includeDependencies?: boolean; signal?: AbortSignal },
+  ): Promise<void>;
+  collectLogs(signal?: AbortSignal): Promise<string[]>;
+  listServices(signal?: AbortSignal): Promise<ComposeServiceState[]>;
   stopStack(): Promise<void>;
 }
 
@@ -23,7 +26,12 @@ export type DockerRuntimeControllerOptions = {
   observer: RunObserver;
   readinessDelay?: ReadinessDelayAdapter;
   runTimeoutMs?: number;
+  operationDrainTimeoutMs?: number;
 };
+
+interface ComposeOperationTracker {
+  readonly inFlight: Set<Promise<unknown>>;
+}
 
 export class RunTimeoutError extends Error {
   constructor(
@@ -35,13 +43,22 @@ export class RunTimeoutError extends Error {
   }
 }
 
+export class ComposeOperationDrainTimeoutError extends Error {
+  constructor(readonly scheduleId: string, readonly timeoutMs: number) {
+    super(`Compose operations for schedule ${scheduleId} did not settle after ${timeoutMs}ms`);
+    this.name = "ComposeOperationDrainTimeoutError";
+  }
+}
+
 export class DockerRuntimeController {
   constructor(private readonly options: DockerRuntimeControllerOptions) {}
 
   async runSchedule(schedule: Schedule, serviceOrder: string[]): Promise<RunResult> {
     this.validateSchedule(schedule, serviceOrder);
     const timeoutMs = this.options.runTimeoutMs ?? 30_000;
+    const operationDrainTimeoutMs = this.options.operationDrainTimeoutMs ?? 1_000;
     validateDelayMs(timeoutMs, "runTimeoutMs");
+    validateDelayMs(operationDrainTimeoutMs, "operationDrainTimeoutMs");
     if (timeoutMs === 0) {
       throw new RangeError("runTimeoutMs must be greater than zero");
     }
@@ -49,9 +66,16 @@ export class DockerRuntimeController {
     let result: RunResult | undefined;
     let runFailure: unknown;
     const observationAbort = new AbortController();
+    const operations: ComposeOperationTracker = { inFlight: new Set() };
+    const execution = this.executeSchedule(
+      schedule,
+      serviceOrder,
+      observationAbort.signal,
+      operations,
+    );
     try {
       result = await this.withTimeout(
-        this.executeSchedule(schedule, serviceOrder, observationAbort.signal),
+        execution,
         schedule.id,
         timeoutMs,
         () => observationAbort.abort(),
@@ -60,6 +84,17 @@ export class DockerRuntimeController {
       runFailure = error;
     }
     observationAbort.abort();
+    try {
+      await this.drainComposeOperations(operations, schedule.id, operationDrainTimeoutMs);
+    } catch (drainFailure) {
+      if (runFailure !== undefined) {
+        throw new AggregateError(
+          [runFailure, drainFailure],
+          `Schedule ${schedule.id} failed and Compose cleanup was skipped`,
+        );
+      }
+      throw drainFailure;
+    }
 
     try {
       await this.cleanup();
@@ -95,7 +130,9 @@ export class DockerRuntimeController {
     schedule: Schedule,
     serviceOrder: string[],
     signal: AbortSignal,
+    operations: ComposeOperationTracker,
   ): Promise<RunResult> {
+    const startedAtMs = Date.now();
     await this.options.compose.resetStack();
     for (const perturbation of schedule.perturbations) {
       if (perturbation.phase === "ready") {
@@ -107,23 +144,151 @@ export class DockerRuntimeController {
         .filter((perturbation) => perturbation.phase === "start")
         .map((perturbation) => [perturbation.workloadId, perturbation.delayMs])
     );
-    for (const service of serviceOrder) {
-      const startDelayMs = startDelays.get(service) ?? 0;
-      await this.options.delay.wait(startDelayMs);
-      await this.options.compose.startService(service);
+    const independentlyScheduled = [...startDelays.values()].some((delayMs) => delayMs > 0);
+    signal.throwIfAborted();
+    if (independentlyScheduled) {
+      const starts = this.trackComposeOperation(
+        operations,
+        this.startIndependently(serviceOrder, startDelays, signal),
+      );
+      await starts;
+    } else {
+      for (const service of serviceOrder) {
+        signal.throwIfAborted();
+        await this.options.delay.wait(0);
+        signal.throwIfAborted();
+        const start = this.trackComposeOperation(
+          operations,
+          this.options.compose.startService(service, { signal }),
+        );
+        await start;
+      }
     }
+
+    signal.throwIfAborted();
+    const logs = await this.trackComposeOperation(
+      operations,
+      this.options.compose.collectLogs(signal),
+    );
+    signal.throwIfAborted();
+    const services = await this.trackComposeOperation(
+      operations,
+      this.options.compose.listServices(signal),
+    );
+    signal.throwIfAborted();
 
     const snapshot: ObservationSnapshot = {
       scheduleId: schedule.id,
-      logs: await this.options.compose.collectLogs(),
-      services: await this.options.compose.listServices(),
+      startedAtMs,
+      logs,
+      services,
+      events: schedule.perturbations
+        .filter((perturbation) => perturbation.phase === "start" && perturbation.delayMs > 0)
+        .map((perturbation) => ({
+          timeMs: 0,
+          service: perturbation.workloadId,
+          event: "scheduled_start_delay",
+          detail: `${perturbation.delayMs}ms`,
+        })),
       signal,
-      refresh: async () => ({
-        logs: await this.options.compose.collectLogs(),
-        services: await this.options.compose.listServices()
-      })
+      refresh: async () => {
+        signal.throwIfAborted();
+        const refreshedLogs = await this.trackComposeOperation(
+          operations,
+          this.options.compose.collectLogs(signal),
+        );
+        signal.throwIfAborted();
+        const refreshedServices = await this.trackComposeOperation(
+          operations,
+          this.options.compose.listServices(signal),
+        );
+        signal.throwIfAborted();
+        return { logs: refreshedLogs, services: refreshedServices };
+      }
     };
     return this.options.observer.evaluate(snapshot);
+  }
+
+  private trackComposeOperation<T>(
+    tracker: ComposeOperationTracker,
+    operation: Promise<T>,
+  ): Promise<T> {
+    let tracked: Promise<T>;
+    tracked = operation.finally(() => tracker.inFlight.delete(tracked));
+    tracker.inFlight.add(tracked);
+    return tracked;
+  }
+
+  private async drainComposeOperations(
+    tracker: ComposeOperationTracker,
+    scheduleId: string,
+    timeoutMs: number,
+  ): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const drain = Promise.allSettled([...tracker.inFlight]).then(() => undefined);
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(
+        () => reject(new ComposeOperationDrainTimeoutError(scheduleId, timeoutMs)),
+        timeoutMs,
+      );
+    });
+    try {
+      await Promise.race([drain, timeout]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
+  private async startIndependently(
+    serviceOrder: string[],
+    startDelays: ReadonlyMap<string, number>,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const cancellation = new AbortController();
+    const cancelForRunAbort = () => cancellation.abort(signal.reason);
+    if (signal.aborted) {
+      cancelForRunAbort();
+    } else {
+      signal.addEventListener("abort", cancelForRunAbort, { once: true });
+    }
+    const starts = serviceOrder.map(async (service) => {
+      await this.waitForDelay(startDelays.get(service) ?? 0, cancellation.signal);
+      cancellation.signal.throwIfAborted();
+      await this.options.compose.startService(service, {
+        includeDependencies: false,
+        signal: cancellation.signal,
+      });
+    });
+
+    try {
+      await Promise.all(starts);
+    } catch (error) {
+      cancellation.abort(error);
+      await Promise.allSettled(starts);
+      throw error;
+    } finally {
+      signal.removeEventListener("abort", cancelForRunAbort);
+    }
+  }
+
+  private async waitForDelay(delayMs: number, signal: AbortSignal): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        signal.removeEventListener("abort", onAbort);
+        reject(signal.reason);
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      this.options.delay.wait(delayMs).then(
+        () => {
+          signal.removeEventListener("abort", onAbort);
+          resolve();
+        },
+        (error) => {
+          signal.removeEventListener("abort", onAbort);
+          reject(error);
+        },
+      );
+    });
   }
 
   private async withTimeout<T>(
