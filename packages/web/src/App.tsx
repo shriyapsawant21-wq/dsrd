@@ -6,6 +6,7 @@ import { getDemoFailureDetail, getReportFailures } from "./report-data";
 import { getInitialTheme, toggleTheme, type Theme } from "./theme";
 import { ScrollCue } from "./ScrollCue";
 import "./folder-picker.css";
+import { configureDirectoryPicker } from "./folder-picker";
 
 type Screen = "landing" | "exploring" | "report" | "detail" | "no_failure" | "error";
 const initialProgress: Progress = { runId: "", phase: "queued", percentage: 0, message: "INITIALIZING", testedSchedules: 0, failureCount: 0 };
@@ -48,6 +49,11 @@ export default function App() {
     setSelectedFolder((first.webkitRelativePath || first.name).split(/[\\/]/)[0]);
     void start(files);
   };
+  const openProjectPicker = () => {
+    if (!input.current) return;
+    configureDirectoryPicker(input.current);
+    input.current.click();
+  };
   const openDetail = async (failureId: string) => { if (!run) return; try { setDetail(await getFailure(run.id, failureId)); } catch { setDetail(getDemoFailureDetail()); } setScreen("detail"); };
   const reset = () => { window.scrollTo({ top: 0, behavior: "auto" }); setScreen("landing"); setRun(undefined); setDetail(undefined); setSelectedFolder(""); setError(""); };
   const reportFailures = getReportFailures(run?.failures);
@@ -57,7 +63,7 @@ export default function App() {
     {screen === "landing" && <main>
       <img ref={movingLogo} src="/dsrd-logo.png" className="moving-logo" alt="DSRD"/>
       <section className="hero"><ScrollCue/></section>
-      <section className="upload-section"><div className="section-title">[ INITIALIZE_SEQUENCE ]</div><button className={`drop-zone ${dragging ? "dragging" : ""}`} onClick={() => input.current?.click()} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); selectProject(e.dataTransfer.files); }}><span className="corner">IN</span><Upload size={38} strokeWidth={2.4}/><strong>SELECT_PROJECT_FOLDER</strong><span>OR_DRAG_AND_DROP_PROJECT_FILES</span><small>INCLUDES_SOURCE_DOCKERFILES_AND_CONFIG</small></button><input ref={input} className="sr-only" aria-label="Project folder" type="file" multiple {...({ webkitdirectory: "", directory: "" } as Record<string, string>)} onChange={(e) => selectProject(e.target.files)}/>{selectedFolder && <p className="selected-folder">PROJECT: {selectedFolder}</p>}{error && <p className="inline-error">{error}</p>}<p className="constraint">SELECT A PROJECT FOLDER // RELATIVE BUILD CONTEXTS ARE PRESERVED</p></section>
+      <section className="upload-section"><div className="section-title">[ INITIALIZE_SEQUENCE ]</div><button className={`drop-zone ${dragging ? "dragging" : ""}`} onClick={openProjectPicker} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); selectProject(e.dataTransfer.files); }}><span className="corner">IN</span><Upload size={38} strokeWidth={2.4}/><strong>SELECT_PROJECT_FOLDER</strong><span>OR_DRAG_AND_DROP_PROJECT_FILES</span><small>INCLUDES_SOURCE_DOCKERFILES_AND_CONFIG</small></button><input ref={input} className="sr-only" aria-label="Project folder" type="file" multiple onChange={(e) => selectProject(e.target.files)}/>{selectedFolder && <p className="selected-folder">PROJECT: {selectedFolder}</p>}{error && <p className="inline-error">{error}</p>}<p className="constraint">SELECT A PROJECT FOLDER // RELATIVE BUILD CONTEXTS ARE PRESERVED</p></section>
     </main>}
     {screen === "exploring" && <main className="screen exploring"><h1>EXPLORING<span className="blink">..._</span></h1><div className="progress-meta"><span>{progress.message}</span><span>{progress.percentage}%</span></div><div className="progress-track"><div style={{ width: `${progress.percentage}%` }}/></div><div className="system-row"><span>SYS_MEM: 0x7F8C4B</span><span>TESTED: {String(progress.testedSchedules).padStart(3,"0")}</span></div><div className="failure-count">FAILURES: {String(progress.failureCount).padStart(2,"0")}</div></main>}
     {screen === "report" && <main className="screen report"><h2>FAILURES: {String(reportFailures.length).padStart(2,"0")}</h2><div className="failure-table" role="table"><div className="row heading"><span>FAILURE_NAME</span><span>SEVERITY</span></div>{reportFailures.map((failure) => <button className="row" key={failure.id} onClick={() => void openDetail(failure.id)}><span>[{failure.name}]</span><span>{failure.severity.toUpperCase()}</span></button>)}</div><a className="export" href={`/api/runs/${run?.id}/report`} download><Download size={14}/> EXPORT_REPORT</a></main>}
