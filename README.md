@@ -41,9 +41,12 @@ Run `race-debugger` with no command from a terminal to open the DSRD dashboard a
 ### Scriptable commands
 
 ```bash
-race-debugger search
+race-debugger search --platform local-process --target fixtures/local-startup-race/manifest.json
+race-debugger search --platform compose --target fixtures/startup-race/compose.yaml
 race-debugger replay failure.json
 ```
+
+The production CLI routes local-process targets to the local runtime and Compose targets to the Docker Compose runtime. Kubernetes targets return a clear unsupported message until C7 is integrated.
 
 ### PowerShell and POSIX replay hints
 
