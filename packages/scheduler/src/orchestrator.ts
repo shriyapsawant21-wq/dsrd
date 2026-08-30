@@ -91,7 +91,6 @@ export async function replayFailure(
 function sameEvidence(expected: TimelineEvent, actual: TimelineEvent): boolean {
   return (
     expected.service === actual.service &&
-    expected.event === actual.event &&
-    expected.detail === actual.detail
+    expected.event === actual.event
   );
 }

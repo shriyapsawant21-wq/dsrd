@@ -90,6 +90,38 @@ describe("orchestration", () => {
       }))
     ).resolves.toMatchObject({ status: "not_reproduced" });
   });
+
+  it("reproduces matching oracle evidence when diagnostic detail changes", async () => {
+    const artifact = {
+      version: 2 as const,
+      createdAt: "2026-08-29T00:00:00.000Z",
+      target,
+      originalSchedule: { id: "original", perturbations: [] },
+      minimizedSchedule: { id: "minimal", perturbations: [] },
+      expectedFailureReason: "bootstrap unavailable",
+      events: [{
+        timeMs: 500,
+        service: "api",
+        event: "startup_failed",
+        detail: "connect ECONNREFUSED 172.20.0.2:5432",
+      }],
+    };
+
+    await expect(
+      replayFailure(artifact, async (_target, schedule) => ({
+        scheduleId: schedule.id,
+        status: "fail",
+        failureReason: "bootstrap unavailable",
+        events: [{
+          timeMs: 725,
+          service: "api",
+          event: "startup_failed",
+          detail: "connect ECONNREFUSED 172.21.0.2:5432",
+        }],
+        logs: [],
+      })),
+    ).resolves.toMatchObject({ status: "reproduced" });
+  });
 });
 
 function fakeRun(schedule: Schedule): RunResult {
