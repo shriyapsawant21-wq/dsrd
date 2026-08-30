@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ExecutionPlatform, RunResult, Schedule, TargetConfig, Workload } from "@dsrd/contracts";
 
 import { loadFailureArtifact } from "./artifact.js";
-import { runCli } from "./cli.js";
+import { resolveTargetPath, runCli } from "./cli.js";
 import { fakePlatform } from "./fake-platform.js";
 
 const directories: string[] = [];
@@ -39,6 +39,31 @@ afterEach(async () => {
 });
 
 describe("race-debugger CLI", () => {
+  it("resolves a Compose project directory to its conventional compose file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-project-"));
+    directories.push(directory);
+    await writeFile(join(directory, "compose.yaml"), "services: {}\n");
+
+    await expect(resolveTargetPath("compose", directory)).resolves.toBe(join(directory, "compose.yaml"));
+  });
+
+  it("resolves a local-process project directory to its manifest", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-project-"));
+    directories.push(directory);
+    await writeFile(join(directory, "manifest.json"), "{\"workloads\": []}\n");
+
+    await expect(resolveTargetPath("local-process", directory)).resolves.toBe(join(directory, "manifest.json"));
+  });
+
+  it("reports when a project directory has no recognized target file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-project-"));
+    directories.push(directory);
+
+    await expect(resolveTargetPath("compose", directory)).rejects.toThrow(
+      "No Compose file found in project directory",
+    );
+  });
+
   it("documents the bare interactive command", async () => {
     const readme = await readFile(join(process.cwd(), "README.md"), "utf8");
 
@@ -68,7 +93,7 @@ describe("race-debugger CLI", () => {
 
     expect(output.join("\n")).toContain("Discover, minimize, and replay startup race conditions.");
     expect(output.join("\n")).toContain("[1] Docker Compose");
-    expect(prompts).toContain("Local manifest path: ");
+    expect(prompts).toContain("Local-process project directory: ");
     expect(prompts).toContain("Save results as [failure.json]: ");
     expect(output.join("\n")).toContain("RUN 01");
     expect(output.join("\n")).toContain("PASS\n\nRUN 02");
@@ -135,10 +160,11 @@ describe("race-debugger CLI", () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-"));
     directories.push(directory);
     const artifactPath = join(directory, "failure.json");
+    await writeFile(join(directory, "manifest.json"), "{}\n");
     const output: string[] = [];
 
     await runCli(
-      ["search", "--platform", "local-process", "--target", "race.json", "--output", artifactPath],
+      ["search", "--platform", "local-process", "--target", directory, "--output", artifactPath],
       { platform: fakePlatform, log: (message) => output.push(message) }
     );
 
@@ -154,8 +180,9 @@ describe("race-debugger CLI", () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-"));
     directories.push(directory);
     const artifactPath = join(directory, "failure.json");
+    await writeFile(join(directory, "manifest.json"), "{}\n");
     await runCli(
-      ["search", "--output", artifactPath],
+      ["search", "--target", directory, "--output", artifactPath],
       { platform: fakePlatform, log: () => undefined }
     );
     const output: string[] = [];
@@ -173,8 +200,9 @@ describe("race-debugger CLI", () => {
     directories.push(directory);
     const artifactPath = join(directory, "failure.json");
     const platform = new ReceiverDependentPlatform();
+    await writeFile(join(directory, "manifest.json"), "{}\n");
 
-    await runCli(["search", "--output", artifactPath], {
+    await runCli(["search", "--target", directory, "--output", artifactPath], {
       platform,
       log: () => undefined,
     });

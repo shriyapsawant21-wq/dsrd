@@ -37,13 +37,13 @@ This is a dynamic debugger, not an AI log summarizer or static Compose linter.
 ### Interactive dashboard
 
 Run `race-debugger` with no command from a terminal to open the DSRD dashboard and choose Search, Replay, or Quit.
-The guided search uses numbered Docker Compose/local-process choices, validates the selected file, and offers a recommended Quick scan that tests one perturbation at a time. Choose Thorough scan only when you intentionally want the larger Cartesian search.
+The guided search uses numbered Docker Compose/local-process choices, validates the selected project directory, and offers a recommended Quick scan that tests one perturbation at a time. Choose Thorough scan only when you intentionally want the larger Cartesian search. Compose projects should contain `compose.yaml`, `compose.yml`, `docker-compose.yaml`, or `docker-compose.yml`; local-process projects should contain `manifest.json`.
 
 ### Scriptable commands
 
 ```bash
-race-debugger search --platform local-process --target fixtures/local-startup-race/manifest.json
-race-debugger search --platform compose --target fixtures/startup-race/compose.yaml
+race-debugger search --platform local-process --target fixtures/local-startup-race
+race-debugger search --platform compose --target fixtures/startup-race
 race-debugger replay failure.json
 ```
 
