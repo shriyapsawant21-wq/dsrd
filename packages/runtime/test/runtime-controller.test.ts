@@ -103,6 +103,31 @@ class BlockingStartCompose extends RecordingCompose {
   }
 }
 
+class BlockingLogsCompose extends RecordingCompose {
+  private resolveLogsEntered?: () => void;
+  private resolveLogs?: () => void;
+  private readonly logsEntered = new Promise<void>((resolve) => {
+    this.resolveLogsEntered = resolve;
+  });
+
+  override async collectLogs(): Promise<string[]> {
+    this.actions.push("logs");
+    this.resolveLogsEntered?.();
+    await new Promise<void>((resolve) => {
+      this.resolveLogs = resolve;
+    });
+    return [];
+  }
+
+  waitForLogs(): Promise<void> {
+    return this.logsEntered;
+  }
+
+  releaseLogs(): void {
+    this.resolveLogs?.();
+  }
+}
+
 class RecordingObserver implements RunObserver {
   snapshot?: ObservationSnapshot;
 
@@ -287,6 +312,34 @@ describe("DockerRuntimeController", () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     expect(compose.actions).not.toContain("logs");
+    expect(compose.actions).not.toContain("ps");
+    expect(observer.snapshot).toBeUndefined();
+  });
+
+  it("does not continue observation when log collection outlives the timeout", async () => {
+    const compose = new BlockingLogsCompose();
+    const observer = new RecordingObserver();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer,
+      runTimeoutMs: 10,
+    });
+    const run = controller.runSchedule({
+      id: "timed-out-during-log-collection",
+      perturbations: [],
+    }, ["api"]);
+    const runFailure = run.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    await compose.waitForLogs();
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    await expect(runFailure).resolves.toBeInstanceOf(RunTimeoutError);
+
+    compose.releaseLogs();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(compose.actions).not.toContain("ps");
     expect(observer.snapshot).toBeUndefined();
   });

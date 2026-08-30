@@ -139,12 +139,16 @@ export class DockerRuntimeController {
     }
 
     signal.throwIfAborted();
+    const logs = await this.options.compose.collectLogs();
+    signal.throwIfAborted();
+    const services = await this.options.compose.listServices();
+    signal.throwIfAborted();
 
     const snapshot: ObservationSnapshot = {
       scheduleId: schedule.id,
       startedAtMs,
-      logs: await this.options.compose.collectLogs(),
-      services: await this.options.compose.listServices(),
+      logs,
+      services,
       events: schedule.perturbations
         .filter((perturbation) => perturbation.phase === "start" && perturbation.delayMs > 0)
         .map((perturbation) => ({
