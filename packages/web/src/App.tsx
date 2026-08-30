@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Cpu, Radio, Terminal, Upload, Download, ArrowLeft, FileCode2 } from "lucide-react";
 import { createRun, getFailure, getRun, subscribeRun, type FailureDetail, type Progress, type RunRecord } from "./api";
+import { getLogoMotion } from "./logo-motion";
 
 type Screen = "landing" | "exploring" | "report" | "detail" | "no_failure" | "error";
 const initialProgress: Progress = { runId: "", phase: "queued", percentage: 0, message: "INITIALIZING", testedSchedules: 0, failureCount: 0 };
@@ -8,8 +9,13 @@ const initialProgress: Progress = { runId: "", phase: "queued", percentage: 0, m
 export default function App() {
   const [screen, setScreen] = useState<Screen>("landing"); const [progress, setProgress] = useState(initialProgress);
   const [run, setRun] = useState<RunRecord>(); const [detail, setDetail] = useState<FailureDetail>(); const [error, setError] = useState("");
-  const [dragging, setDragging] = useState(false); const [scroll, setScroll] = useState(0); const input = useRef<HTMLInputElement>(null);
-  useEffect(() => { const handler = () => setScroll(Math.min(1, window.scrollY / 420)); window.addEventListener("scroll", handler); return () => window.removeEventListener("scroll", handler); }, []);
+  const [dragging, setDragging] = useState(false); const [scrollY, setScrollY] = useState(0); const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight })); const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const update = () => { setScrollY(window.scrollY); setViewport({ width: window.innerWidth, height: window.innerHeight }); };
+    window.addEventListener("scroll", update, { passive: true }); window.addEventListener("resize", update); update();
+    return () => { window.removeEventListener("scroll", update); window.removeEventListener("resize", update); };
+  }, []);
+  const logo = getLogoMotion(scrollY, viewport.width, viewport.height);
   const start = async (file?: File) => {
     if (!file) return; if (!/\.ya?ml$/i.test(file.name)) { setError("SELECT_A_COMPOSE_YAML_FILE"); return; }
     try {
@@ -26,9 +32,10 @@ export default function App() {
   const openDetail = async () => { if (!run) return; try { setDetail(await getFailure(run.id)); setScreen("detail"); } catch (cause) { setError(cause instanceof Error ? cause.message : "DETAIL_FAILED"); setScreen("error"); } };
   const reset = () => { setScreen("landing"); setRun(undefined); setDetail(undefined); setError(""); window.scrollTo({ top: 0, behavior: "smooth" }); };
   return <div className="app">
-    <header className="nav"><button className="brand" onClick={reset} aria-label="DSRD home"><span className="nav-logo"><img src="/dsrd-logo.png" alt=""/></span></button><div className="nav-icons"><Cpu size={15}/><Radio size={15}/><Terminal size={16}/></div></header>
+    <header className="nav"><button className="brand" onClick={reset} aria-label="DSRD home">{screen !== "landing" && <img className="docked-logo" src="/dsrd-logo.png" alt=""/>}</button><div className="nav-icons"><Cpu size={15}/><Radio size={15}/><Terminal size={16}/></div></header>
     {screen === "landing" && <main>
-      <section className="hero"><img src="/dsrd-logo.png" className="hero-logo" alt="DSRD" style={{ transform: `translateY(${scroll * -70}px) scale(${1 - scroll * .36})`, opacity: 1 - scroll * .15 }}/><div className="scroll-cue">SCROLL_TO_INITIALIZE<br/><span>↓</span></div></section>
+      <img src="/dsrd-logo.png" className="moving-logo" alt="DSRD" style={{ left: logo.left, top: logo.top, width: logo.width, transform: `translate(${logo.translateXPercent}%, -50%)` }}/>
+      <section className="hero"><div className="scroll-cue">SCROLL_TO_INITIALIZE<br/><span>↓</span></div></section>
       <section className="upload-section"><div className="section-title">[ INITIALIZE_SEQUENCE ]</div><button className={`drop-zone ${dragging ? "dragging" : ""}`} onClick={() => input.current?.click()} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); void start(e.dataTransfer.files[0]); }}><span className="corner">IN</span><Upload size={38} strokeWidth={2.4}/><strong>DRAG_AND_DROP_COMPOSE_FILE</strong><span>OR_CLICK_TO_BROWSE</span><small>SUPPORTED_FORMATS: .YAML, .YML</small></button><input ref={input} className="sr-only" aria-label="Compose file" type="file" accept=".yaml,.yml" onChange={(e) => void start(e.target.files?.[0])}/>{error && <p className="inline-error">{error}</p>}<p className="constraint">SELF-CONTAINED COMPOSE FILES ONLY // LOCAL BUILD CONTEXTS REQUIRE COMPANION FILE SUPPORT</p></section>
     </main>}
     {screen === "exploring" && <main className="screen exploring"><h1>EXPLORING<span className="blink">..._</span></h1><div className="progress-meta"><span>{progress.message}</span><span>{progress.percentage}%</span></div><div className="progress-track"><div style={{ width: `${progress.percentage}%` }}/></div><div className="system-row"><span>SYS_MEM: 0x7F8C4B</span><span>TESTED: {String(progress.testedSchedules).padStart(3,"0")}</span></div><div className="failure-count">FAILURES: {String(progress.failureCount).padStart(2,"0")}</div></main>}
