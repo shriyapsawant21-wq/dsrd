@@ -5,6 +5,13 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { RunService } from "./run-service.js";
 import { RunStore } from "./run-store.js";
+import type { FailureArtifact } from "@dsrd/contracts";
+
+function summarizeFailures(artifact?: FailureArtifact) {
+  if (!artifact) return [];
+  const event = [...artifact.events].reverse().find(({ event }) => /fail|error|refused|exit|fatal/i.test(event)) ?? artifact.events.at(-1);
+  return [{ id: "failure-1", name: (event?.event ?? "startup_race").toUpperCase(), severity: "critical", reason: artifact.expectedFailureReason ?? "Startup race discovered" }];
+}
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2_000_000 } });
 export function createApp(store: RunStore, service: RunService) {
@@ -21,7 +28,7 @@ export function createApp(store: RunStore, service: RunService) {
   });
   app.get("/api/runs/:runId", (req, res) => {
     const run = store.get(req.params.runId);
-    return run ? res.json(run) : res.status(404).json({ error: "Run not found" });
+    return run ? res.json({ ...run, failures: summarizeFailures(run.artifact) }) : res.status(404).json({ error: "Run not found" });
   });
   app.get("/api/runs/:runId/events", (req, res) => {
     const run = store.get(req.params.runId);

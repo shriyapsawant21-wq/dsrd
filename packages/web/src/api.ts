@@ -1,5 +1,6 @@
 export type Progress = { runId: string; phase: string; percentage: number; message: string; testedSchedules: number; failureCount: number };
-export type RunRecord = { id: string; progress: Progress; error?: string; artifact?: { expectedFailureReason?: string; events: TimelineEvent[] } };
+export type FailureSummary = { id: string; name: string; severity: string; reason: string };
+export type RunRecord = { id: string; progress: Progress; failures: FailureSummary[]; error?: string; artifact?: { expectedFailureReason?: string; events: TimelineEvent[] } };
 export type TimelineEvent = { timeMs: number; service: string; event: string; detail?: string };
 export type FailureDetail = { id: string; reason: string; severity: string; events: TimelineEvent[]; originalSchedule: unknown; minimizedSchedule: unknown };
 
@@ -15,4 +16,4 @@ export function subscribeRun(runId: string, onEvent: (event: Progress) => void, 
   source.onerror = onError; return () => source.close();
 }
 export async function getRun(runId: string): Promise<RunRecord> { const response = await fetch(`/api/runs/${runId}`); if (!response.ok) throw new Error("Run not found"); return response.json(); }
-export async function getFailure(runId: string): Promise<FailureDetail> { const response = await fetch(`/api/runs/${runId}/failures/failure-1`); if (!response.ok) throw new Error("Failure evidence not found"); return response.json(); }
+export async function getFailure(runId: string, failureId: string): Promise<FailureDetail> { const response = await fetch(`/api/runs/${runId}/failures/${failureId}`); if (!response.ok) throw new Error("Failure evidence not found"); return response.json(); }

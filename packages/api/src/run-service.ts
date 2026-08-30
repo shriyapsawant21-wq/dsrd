@@ -25,7 +25,7 @@ export class RunService {
     }
   }
   private publishTerminal(runId: string, phase: RunPhase, message: string): void {
-    this.store.publish(runId, { ...this.require(runId).progress, phase, percentage: 100, message });
+    this.store.publish(runId, { ...this.require(runId).progress, phase, percentage: 100, message, failureCount: phase === "completed" ? 1 : 0 });
   }
   private require(runId: string) { const run = this.store.get(runId); if (!run) throw new Error(`Unknown run: ${runId}`); return run; }
 }

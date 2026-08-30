@@ -11,4 +11,5 @@ it("marks a successful discovery complete", async () => {
   await service.start(run.id, "compose.yaml");
   expect(store.get(run.id)?.progress.phase).toBe("completed");
   expect(store.get(run.id)?.progress.testedSchedules).toBe(3);
+  expect(store.get(run.id)?.progress.failureCount).toBe(1);
 });
