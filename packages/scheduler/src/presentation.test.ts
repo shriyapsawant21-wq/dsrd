@@ -36,6 +36,12 @@ describe("CLI presentation", () => {
     ).toContain("Replay (POSIX): race-debugger replay 'failure.json'");
   });
 
+  it("styles failure evidence in hot pink when color is enabled", () => {
+    expect(renderResultSummary({ status: "failure", useColor: true })).toContain(
+      "\u001B[38;2;255;105;180m",
+    );
+  });
+
   it("renders shell-safe replay commands for PowerShell and POSIX", () => {
     const output = renderResultSummary({
       status: "failure",
