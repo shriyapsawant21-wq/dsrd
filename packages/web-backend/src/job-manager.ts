@@ -20,6 +20,7 @@ type JobManagerOptions = {
 
 type StoredJob = {
   view: JobView;
+  artifact?: FailureArtifact;
   target: TargetConfig;
   startedAtMs: number;
   abort: AbortController;
@@ -51,7 +52,7 @@ export class JobManager {
       );
       job.view.discovery = discovery;
       if (discovery.status === "found_failure") {
-        job.view.artifact = discovery.artifact;
+        job.artifact = discovery.artifact;
       }
     });
     return this.copyView(job.view);
@@ -78,9 +79,16 @@ export class JobManager {
     return [...this.requireJob(jobId).events];
   }
 
-  subscribe(jobId: string, listener: (event: JobEvent) => void): () => void {
+  subscribe(
+    jobId: string,
+    listener: (event: JobEvent) => void,
+    replayExisting = false
+  ): () => void {
     const job = this.requireJob(jobId);
     job.listeners.add(listener);
+    if (replayExisting) {
+      for (const event of job.events) listener(event);
+    }
     return () => job.listeners.delete(listener);
   }
 
@@ -97,7 +105,7 @@ export class JobManager {
   }
 
   artifactFor(jobId: string): FailureArtifact {
-    const artifact = this.requireJob(jobId).view.artifact;
+    const artifact = this.requireJob(jobId).artifact;
     if (artifact === undefined) {
       throw new BackendError(
         "ARTIFACT_NOT_READY",

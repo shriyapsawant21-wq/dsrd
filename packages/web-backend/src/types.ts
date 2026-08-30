@@ -68,7 +68,6 @@ export type JobView = {
   finishedAt?: string;
   discovery?: DiscoveryResult;
   replay?: ReplayResult;
-  artifact?: FailureArtifact;
   error?: { code: string; message: string };
 };
 
