@@ -95,11 +95,11 @@ export class KubectlKubernetesExecutor implements KubernetesScheduleExecutor {
     const startDelays = new Map(schedule.perturbations
       .filter((perturbation) => perturbation.phase === "start")
       .map((perturbation) => [perturbation.workloadId, perturbation.delayMs]));
-    for (const workloadId of _workloadOrder) {
+    await Promise.all(_workloadOrder.map(async (workloadId) => {
       const delayMs = startDelays.get(workloadId) ?? 0;
       if (delayMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
       await this.applySelector(`dsrd.workload=${workloadId}`);
-    }
+    }));
     if (this.options.observer !== undefined) {
       return this.options.observer.evaluate(await this.observe(schedule.id, _workloadOrder, startedAtMs));
     }

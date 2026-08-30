@@ -98,6 +98,18 @@ class RecordingRunner implements CommandRunner {
 }
 
 describe("KubectlKubernetesExecutor", () => {
+  it("starts an undelayed workload before a delayed workload", async () => {
+    const runner = new RecordingRunner();
+    const executor = new KubectlKubernetesExecutor({
+      target: { platform: "kubernetes", manifestPath: "fixture.yaml", namespace: "race-debugger" },
+      runner,
+      evaluate: async (scheduleId) => ({ scheduleId, status: "pass", events: [], logs: [] }),
+    });
+    await executor.runSchedule({ id: "delay-api", perturbations: [{ workloadId: "api", phase: "start", delayMs: 20 }] }, ["api", "database"]);
+    const applies = runner.invocations.filter(({ args }) => args[0] === "apply").map(({ args }) => args[args.indexOf("-l") + 1]);
+    expect(applies).toEqual(["dsrd.infrastructure=namespace", "dsrd.workload=database", "dsrd.workload=api"]);
+  });
+
   it("collects workload pod state and logs through its injected observer", async () => {
     const runner = new RecordingRunner();
     runner.run = async (invocation) => {
@@ -139,14 +151,13 @@ describe("KubectlKubernetesExecutor", () => {
       perturbations: [{ workloadId: "api", phase: "start", delayMs: 1 }],
     }, ["api", "postgres", "migrate"]);
 
-    expect(runner.invocations).toEqual([
+    expect(runner.invocations.slice(0, 3)).toEqual([
       { command: "kubectl", args: ["delete", "--ignore-not-found", "--wait=true", "-f", "fixture.yaml", "--namespace", "race-debugger"], cwd: process.cwd() },
       { command: "kubectl", args: ["delete", "--ignore-not-found", "--wait=true", "-f", "fixture.yaml", "--namespace", "race-debugger"], cwd: process.cwd() },
       { command: "kubectl", args: ["apply", "-f", "fixture.yaml", "-l", "dsrd.infrastructure=namespace", "--namespace", "race-debugger"], cwd: process.cwd() },
-      { command: "kubectl", args: ["apply", "-f", "fixture.yaml", "-l", "dsrd.workload=api", "--namespace", "race-debugger"], cwd: process.cwd() },
-      { command: "kubectl", args: ["apply", "-f", "fixture.yaml", "-l", "dsrd.workload=postgres", "--namespace", "race-debugger"], cwd: process.cwd() },
-      { command: "kubectl", args: ["apply", "-f", "fixture.yaml", "-l", "dsrd.workload=migrate", "--namespace", "race-debugger"], cwd: process.cwd() },
     ]);
+    expect(runner.invocations.slice(3).map(({ args }) => args[args.indexOf("-l") + 1]).sort())
+      .toEqual(["dsrd.workload=api", "dsrd.workload=migrate", "dsrd.workload=postgres"]);
   });
 });
 
