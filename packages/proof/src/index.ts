@@ -19,6 +19,10 @@ export {
 export type { ReadinessObservation } from "./probes/types.js";
 export { buildWorkloadTimeline } from "./timeline.js";
 export { ComposeProofObserver } from "./compose-proof-observer.js";
+export {
+  KubernetesProofObserver,
+  type KubernetesObservation,
+} from "./kubernetes-proof-observer.js";
 export { parseLogEvidence } from "./logs/parse.js";
 export type {
   LogFailureCategory,

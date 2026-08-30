@@ -5,6 +5,7 @@ export * from "./execution-platform.js";
 export * from "./compose-platform.js";
 export * from "./local-process-manifest.js";
 export * from "./local-process-platform.js";
+export * from "./kubernetes-platform.js";
 export * from "./observer.js";
 export * from "./readiness-delay.js";
 export * from "./runtime-controller.js";
