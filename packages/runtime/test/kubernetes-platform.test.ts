@@ -162,6 +162,13 @@ describe("KubectlKubernetesExecutor", () => {
 });
 
 describe("KubectlKubernetesResourceDiscovery", () => {
+  it("normalizes consecutive kubectl JSON documents", async () => {
+    const runner = new RecordingRunner();
+    runner.run = async () => ({ stdout: `${JSON.stringify({ kind: "Deployment", metadata: { name: "api" } })}\n${JSON.stringify({ kind: "Job", metadata: { name: "migrate" } })}\n`, stderr: "", exitCode: 0 });
+    await expect(new KubectlKubernetesResourceDiscovery({ runner }).discoverResources(target)).resolves.toEqual([
+      { name: "api", kind: "Deployment" }, { name: "migrate", kind: "Job" },
+    ]);
+  });
   it("normalizes kubectl dry-run output without contacting a cluster", async () => {
     const runner = new RecordingRunner();
     runner.run = async (invocation) => {

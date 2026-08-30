@@ -33,8 +33,8 @@ export class KubectlKubernetesResourceDiscovery implements KubernetesResourceDis
       cwd: this.options.cwd ?? process.cwd(),
     });
     if (result.exitCode !== 0) throw new Error(`kubectl create failed: ${result.stderr || `exit code ${result.exitCode}`}`);
-    const parsed: unknown = JSON.parse(result.stdout);
-    const items = isRecord(parsed) && Array.isArray(parsed.items) ? parsed.items : [parsed];
+    const documents = result.stdout.trim().split(/\n(?=\{)/).filter(Boolean).map((document) => JSON.parse(document) as unknown);
+    const items = documents.flatMap((parsed) => isRecord(parsed) && Array.isArray(parsed.items) ? parsed.items : [parsed]);
     return items.flatMap((item): KubernetesResourceDefinition[] => {
       if (!isRecord(item) || !isRecord(item.metadata) || typeof item.metadata.name !== "string") return [];
       if (item.kind !== "Deployment" && item.kind !== "StatefulSet" && item.kind !== "Job") return [];
@@ -58,6 +58,7 @@ export type KubectlKubernetesExecutorOptions = {
   runner: CommandRunner;
   evaluate?: (scheduleId: string) => Promise<RunResult>;
   observer?: KubernetesRunObserver;
+  settleMs?: number;
   cwd?: string;
 };
 
@@ -105,6 +106,7 @@ export class KubectlKubernetesExecutor implements KubernetesScheduleExecutor {
       await this.applySelector(`dsrd.workload=${workloadId}`);
     }));
     if (this.options.observer !== undefined) {
+      await new Promise<void>((resolve) => setTimeout(resolve, this.options.settleMs ?? 1_500));
       return this.options.observer.evaluate(await this.observe(schedule.id, _workloadOrder, startedAtMs));
     }
     if (this.options.evaluate !== undefined) return this.options.evaluate(schedule.id);

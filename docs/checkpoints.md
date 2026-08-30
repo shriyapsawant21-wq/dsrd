@@ -82,11 +82,11 @@ Blockers: none
 Next checkpoint: C7
 
 ## C7 — Kubernetes adapter
-Status: blocked
+Status: complete
 Owner: Riya, Shriya, Akil
-Evidence: Implemented: optional Kubernetes ExecutionPlatform discovery for Deployments, StatefulSets, and Jobs; manifest-scoped reset/replay; per-workload, label-selected startup application; and a Kubernetes proof adapter that delegates failed Job observations to the deterministic workload oracle. Focused runtime and proof tests passed; local Kind verification created the fixture namespace, applied Deployment, StatefulSet, and Job separately, listed the resources, and deleted the disposable namespace.
+Evidence: Implemented: Kubernetes admission evaluated and adapter verification recorded. Fresh `KUBERNETES_C7_INTEGRATION=1 npx vitest run .worktrees/feat-kubernetes-adapter/packages/scheduler/src/kubernetes-kind.integration.test.ts` passed (2 tests): concrete discovery and real Kind search -> minimization -> target artifact -> replay; fixture namespace cleanup succeeded.
 Commit/PR: feat/kubernetes-adapter
-Remaining work: collect Kubernetes resource state/logs in runtime, bind the Kubernetes platform into the executable scheduler path, create the deterministic race fixture, and verify normal startup, discovery, minimization, artifact, and replay.
-Dependencies: local kind-dsrd-c7 cluster ready.
+Remaining work: none
+Dependencies: ready
 Blockers: none
-Next checkpoint: C7
+Next checkpoint: none
