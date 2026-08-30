@@ -13,7 +13,16 @@ export async function createRun(files: Iterable<File>): Promise<{ runId: string 
   body.append("relativePaths", JSON.stringify(paths));
   selected.forEach((file) => body.append("projectFiles", file));
   const response = await fetch("/api/runs", { method: "POST", body });
-  if (!response.ok) throw new Error((await response.json()).error ?? "Upload failed");
+  if (!response.ok) {
+    const responseText = await response.text();
+    try {
+      const error = JSON.parse(responseText) as { error?: unknown };
+      if (typeof error.error === "string") throw new Error(error.error);
+    } catch (error) {
+      if (error instanceof Error && error.message !== "Unexpected end of JSON input") throw error;
+    }
+    throw new Error("UPLOAD_API_UNAVAILABLE");
+  }
   return response.json();
 }
 export function subscribeRun(runId: string, onEvent: (event: Progress) => void, onError: () => void): () => void {

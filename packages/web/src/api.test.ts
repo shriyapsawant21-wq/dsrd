@@ -43,6 +43,12 @@ it("posts folder files with their browser-relative paths", async () => {
   expect(form.getAll("projectFiles")).toHaveLength(1);
 });
 
+it("shows a stable upload error when the API returns an empty error response", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, text: async () => "" }));
+
+  await expect(createRun([new File(["services: {}"], "compose.yaml")])).rejects.toThrow("UPLOAD_API_UNAVAILABLE");
+});
+
 it("delivers the API's initial progress event", () => {
   vi.stubGlobal("EventSource", FakeEventSource);
   const received: Progress[] = [];
