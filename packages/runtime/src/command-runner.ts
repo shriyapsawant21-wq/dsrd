@@ -4,6 +4,7 @@ export type CommandInvocation = {
   command: string;
   args: string[];
   cwd: string;
+  signal?: AbortSignal;
 };
 
 export type CommandResult = {
@@ -22,7 +23,8 @@ export class NodeCommandRunner implements CommandRunner {
       const child = spawn(invocation.command, invocation.args, {
         cwd: invocation.cwd,
         shell: false,
-        windowsHide: true
+        windowsHide: true,
+        signal: invocation.signal,
       });
       let stdout = "";
       let stderr = "";
@@ -42,4 +44,3 @@ export class NodeCommandRunner implements CommandRunner {
     });
   }
 }
-

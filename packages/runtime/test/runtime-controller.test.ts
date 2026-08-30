@@ -128,6 +128,26 @@ class BlockingLogsCompose extends RecordingCompose {
   }
 }
 
+class AbortableStartCompose extends RecordingCompose {
+  override async startService(
+    service: string,
+    options?: { includeDependencies?: boolean; signal?: AbortSignal },
+  ): Promise<void> {
+    this.actions.push(`start:${service}`);
+    await new Promise<void>((_resolve, reject) => {
+      const signal = options?.signal;
+      if (signal === undefined) {
+        return;
+      }
+      if (signal.aborted) {
+        reject(signal.reason);
+        return;
+      }
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
+  }
+}
+
 class RecordingObserver implements RunObserver {
   snapshot?: ObservationSnapshot;
 
@@ -342,6 +362,27 @@ describe("DockerRuntimeController", () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(compose.actions).not.toContain("ps");
     expect(observer.snapshot).toBeUndefined();
+  });
+
+  it("aborts an in-flight Compose start before timeout cleanup", async () => {
+    const compose = new AbortableStartCompose();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer: new RecordingObserver(),
+      runTimeoutMs: 10,
+    });
+
+    const outcome = await Promise.race([
+      controller.runSchedule({
+        id: "timed-out-during-compose-start",
+        perturbations: [],
+      }, ["api"]).catch((error: unknown) => error),
+      new Promise<"still-running">((resolve) => setTimeout(() => resolve("still-running"), 50)),
+    ]);
+
+    expect(outcome).toBeInstanceOf(RunTimeoutError);
+    expect(compose.actions.at(-1)).toBe("stop");
   });
 
   it("stops the stack when a service fails to start", async () => {

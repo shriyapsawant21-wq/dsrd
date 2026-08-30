@@ -11,7 +11,10 @@ import type { ReadinessDelayAdapter } from "./readiness-delay.js";
 
 export interface ComposeRuntime {
   resetStack(): Promise<void>;
-  startService(service: string, options?: { includeDependencies?: boolean }): Promise<void>;
+  startService(
+    service: string,
+    options?: { includeDependencies?: boolean; signal?: AbortSignal },
+  ): Promise<void>;
   collectLogs(): Promise<string[]>;
   listServices(): Promise<ComposeServiceState[]>;
   stopStack(): Promise<void>;
@@ -132,7 +135,7 @@ export class DockerRuntimeController {
         signal.throwIfAborted();
         await this.options.delay.wait(0);
         signal.throwIfAborted();
-        const start = this.options.compose.startService(service);
+        const start = this.options.compose.startService(service, { signal });
         startup.inFlight = start;
         await start;
       }
@@ -181,7 +184,10 @@ export class DockerRuntimeController {
     const starts = serviceOrder.map(async (service) => {
       await this.waitForDelay(startDelays.get(service) ?? 0, cancellation.signal);
       cancellation.signal.throwIfAborted();
-      await this.options.compose.startService(service, { includeDependencies: false });
+      await this.options.compose.startService(service, {
+        includeDependencies: false,
+        signal: cancellation.signal,
+      });
     });
 
     try {
