@@ -20,11 +20,12 @@ export interface CommandRunner {
 export class NodeCommandRunner implements CommandRunner {
   run(invocation: CommandInvocation, signal?: AbortSignal): Promise<CommandResult> {
     return new Promise((resolve, reject) => {
+      const abortSignal = invocation.signal ?? signal;
       const child = spawn(invocation.command, invocation.args, {
         cwd: invocation.cwd,
         shell: false,
         windowsHide: true,
-        signal: invocation.signal,
+        signal: abortSignal,
       });
       let stdout = "";
       let stderr = "";
@@ -35,12 +36,11 @@ export class NodeCommandRunner implements CommandRunner {
           return;
         }
         settled = true;
-        signal?.removeEventListener("abort", abort);
+        abortSignal?.removeEventListener("abort", abort);
         callback();
       };
       const abort = () => {
         child.kill();
-        finish(() => reject(signal?.reason ?? new Error("Command aborted")));
       };
 
       child.stdout.setEncoding("utf8");
@@ -51,14 +51,22 @@ export class NodeCommandRunner implements CommandRunner {
       child.stderr.on("data", (chunk: string) => {
         stderr += chunk;
       });
-      child.once("error", (error) => finish(() => reject(error)));
-      child.once("close", (exitCode) => {
-        finish(() => resolve({ stdout, stderr, exitCode: exitCode ?? 1 }));
+      child.once("error", (error) => {
+        if (!abortSignal?.aborted) {
+          finish(() => reject(error));
+        }
       });
-      if (signal?.aborted) {
+      child.once("close", (exitCode) => {
+        if (abortSignal?.aborted) {
+          finish(() => reject(abortSignal.reason ?? new Error("Command aborted")));
+        } else {
+          finish(() => resolve({ stdout, stderr, exitCode: exitCode ?? 1 }));
+        }
+      });
+      if (abortSignal?.aborted) {
         abort();
       } else {
-        signal?.addEventListener("abort", abort, { once: true });
+        abortSignal?.addEventListener("abort", abort, { once: true });
       }
     });
   }

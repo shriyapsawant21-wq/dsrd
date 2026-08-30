@@ -130,6 +130,11 @@ class BlockingLogsCompose extends RecordingCompose {
 
 class AbortableRefreshCompose extends RecordingCompose {
   private logCalls = 0;
+  private releaseRefresh?: () => void;
+  private resolveRefreshStarted?: () => void;
+  private readonly refreshStarted = new Promise<void>((resolve) => {
+    this.resolveRefreshStarted = resolve;
+  });
   refreshSignal?: AbortSignal;
 
   override async collectLogs(signal?: AbortSignal): Promise<string[]> {
@@ -139,10 +144,19 @@ class AbortableRefreshCompose extends RecordingCompose {
       return [];
     }
     this.refreshSignal = signal;
-    await new Promise<void>((_resolve, reject) => {
-      signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+    this.resolveRefreshStarted?.();
+    await new Promise<void>((resolve) => {
+      this.releaseRefresh = resolve;
     });
-    return [];
+    throw signal?.reason;
+  }
+
+  waitForRefresh(): Promise<void> {
+    return this.refreshStarted;
+  }
+
+  release(): void {
+    this.releaseRefresh?.();
   }
 }
 
@@ -298,7 +312,7 @@ describe("DockerRuntimeController", () => {
     expect(compose.actions.at(-1)).toBe("stop");
   });
 
-  it("cleans up when an in-flight independent start ignores timeout cancellation", async () => {
+  it("waits for an in-flight independent start before timeout cleanup", async () => {
     const compose = new BlockingStartCompose();
     const delay = new BlockingDelay();
     const controller = new DockerRuntimeController({
@@ -311,18 +325,18 @@ describe("DockerRuntimeController", () => {
       id: "timed-out-during-api-start",
       perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
     }, ["api", "postgres"]);
+    const runFailure = run.catch((error: unknown) => error);
 
     await compose.waitForStart();
-    const outcome = await Promise.race([
-      run.catch((error: unknown) => error),
-      new Promise<"still-running">((resolve) => setTimeout(() => resolve("still-running"), 50)),
-    ]);
-
-    expect(outcome).toBeInstanceOf(RunTimeoutError);
-    expect(compose.actions).toContain("stop");
-    compose.releaseStart();
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    try {
+      expect(compose.actions).not.toContain("stop");
+    } finally {
+      compose.releaseStart();
+    }
+    await expect(runFailure).resolves.toBeInstanceOf(RunTimeoutError);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    expect(compose.actions).toEqual(["reset", "start:api", "stop", "started:api"]);
+    expect(compose.actions).toEqual(["reset", "start:api", "started:api", "stop"]);
   });
 
   it("does not observe after a timed-out start settles", async () => {
@@ -374,12 +388,13 @@ describe("DockerRuntimeController", () => {
 
     await compose.waitForLogs();
     await new Promise<void>((resolve) => setTimeout(resolve, 20));
-    await expect(runFailure).resolves.toBeInstanceOf(RunTimeoutError);
-
+    expect(compose.actions).not.toContain("stop");
     compose.releaseLogs();
+    await expect(runFailure).resolves.toBeInstanceOf(RunTimeoutError);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(compose.actions).not.toContain("ps");
     expect(observer.snapshot).toBeUndefined();
+    expect(compose.actions.at(-1)).toBe("stop");
   });
 
   it("aborts an observer refresh before timeout cleanup", async () => {
@@ -399,16 +414,18 @@ describe("DockerRuntimeController", () => {
     });
 
     const run = controller.runSchedule({ id: "refresh-stalled", perturbations: [] }, []);
-    const assertion = expect(run).rejects.toThrow(
-      "Schedule refresh-stalled timed out after 100ms",
-    );
-    await vi.advanceTimersByTimeAsync(100);
-
+    const runFailure = run.catch((error: unknown) => error);
+    await compose.waitForRefresh();
     try {
-      await assertion;
+      await vi.advanceTimersByTimeAsync(100);
       expect(compose.refreshSignal?.aborted).toBe(true);
+      expect(compose.actions).not.toContain("stop");
+      compose.release();
+      const failure = await runFailure;
+      expect(failure).toBeInstanceOf(RunTimeoutError);
       expect(compose.actions).toEqual(["reset", "logs", "ps", "logs", "stop"]);
     } finally {
+      compose.release();
       vi.useRealTimers();
     }
   });

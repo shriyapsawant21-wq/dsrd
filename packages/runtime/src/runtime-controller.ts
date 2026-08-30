@@ -28,8 +28,8 @@ export type DockerRuntimeControllerOptions = {
   runTimeoutMs?: number;
 };
 
-interface StartupTracker {
-  inFlight?: Promise<void>;
+interface ComposeOperationTracker {
+  readonly inFlight: Set<Promise<unknown>>;
 }
 
 export class RunTimeoutError extends Error {
@@ -56,12 +56,12 @@ export class DockerRuntimeController {
     let result: RunResult | undefined;
     let runFailure: unknown;
     const observationAbort = new AbortController();
-    const startup: StartupTracker = {};
+    const operations: ComposeOperationTracker = { inFlight: new Set() };
     const execution = this.executeSchedule(
       schedule,
       serviceOrder,
       observationAbort.signal,
-      startup,
+      operations,
     );
     try {
       result = await this.withTimeout(
@@ -74,7 +74,7 @@ export class DockerRuntimeController {
       runFailure = error;
     }
     observationAbort.abort();
-    void startup.inFlight?.catch(() => undefined);
+    await Promise.allSettled(operations.inFlight);
 
     try {
       await this.cleanup();
@@ -110,7 +110,7 @@ export class DockerRuntimeController {
     schedule: Schedule,
     serviceOrder: string[],
     signal: AbortSignal,
-    startup: StartupTracker,
+    operations: ComposeOperationTracker,
   ): Promise<RunResult> {
     const startedAtMs = Date.now();
     await this.options.compose.resetStack();
@@ -127,24 +127,34 @@ export class DockerRuntimeController {
     const independentlyScheduled = [...startDelays.values()].some((delayMs) => delayMs > 0);
     signal.throwIfAborted();
     if (independentlyScheduled) {
-      const starts = this.startIndependently(serviceOrder, startDelays, signal);
-      startup.inFlight = starts;
+      const starts = this.trackComposeOperation(
+        operations,
+        this.startIndependently(serviceOrder, startDelays, signal),
+      );
       await starts;
     } else {
       for (const service of serviceOrder) {
         signal.throwIfAborted();
         await this.options.delay.wait(0);
         signal.throwIfAborted();
-        const start = this.options.compose.startService(service, { signal });
-        startup.inFlight = start;
+        const start = this.trackComposeOperation(
+          operations,
+          this.options.compose.startService(service, { signal }),
+        );
         await start;
       }
     }
 
     signal.throwIfAborted();
-    const logs = await this.options.compose.collectLogs(signal);
+    const logs = await this.trackComposeOperation(
+      operations,
+      this.options.compose.collectLogs(signal),
+    );
     signal.throwIfAborted();
-    const services = await this.options.compose.listServices(signal);
+    const services = await this.trackComposeOperation(
+      operations,
+      this.options.compose.listServices(signal),
+    );
     signal.throwIfAborted();
 
     const snapshot: ObservationSnapshot = {
@@ -163,14 +173,30 @@ export class DockerRuntimeController {
       signal,
       refresh: async () => {
         signal.throwIfAborted();
-        const refreshedLogs = await this.options.compose.collectLogs(signal);
+        const refreshedLogs = await this.trackComposeOperation(
+          operations,
+          this.options.compose.collectLogs(signal),
+        );
         signal.throwIfAborted();
-        const refreshedServices = await this.options.compose.listServices(signal);
+        const refreshedServices = await this.trackComposeOperation(
+          operations,
+          this.options.compose.listServices(signal),
+        );
         signal.throwIfAborted();
         return { logs: refreshedLogs, services: refreshedServices };
       }
     };
     return this.options.observer.evaluate(snapshot);
+  }
+
+  private trackComposeOperation<T>(
+    tracker: ComposeOperationTracker,
+    operation: Promise<T>,
+  ): Promise<T> {
+    let tracked: Promise<T>;
+    tracked = operation.finally(() => tracker.inFlight.delete(tracked));
+    tracker.inFlight.add(tracked);
+    return tracked;
   }
 
   private async startIndependently(
