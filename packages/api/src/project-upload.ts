@@ -1,18 +1,19 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import type { TargetConfig } from "@dsrd/contracts";
 
 const composeNames = new Set(["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"]);
 
-export type MaterializedComposeProject = {
+export type MaterializedProject = {
   projectDirectory: string;
-  composeFile: string;
+  target: TargetConfig;
 };
 
-export async function materializeComposeProject(
+export async function materializeProject(
   files: Express.Multer.File[],
   relativePathsJson: unknown
-): Promise<MaterializedComposeProject> {
+): Promise<MaterializedProject> {
   const relativePaths = parseRelativePaths(relativePathsJson, files.length);
   const projectDirectory = await mkdtemp(join(tmpdir(), "dsrd-web-run-"));
 
@@ -27,10 +28,15 @@ export async function materializeComposeProject(
     }
 
     const composeFiles = relativePaths.filter((path) => composeNames.has(basename(path)));
-    if (composeFiles.length === 0) throw new Error("No Compose file found in project folder");
-    if (composeFiles.length > 1) throw new Error("Multiple Compose files found; keep one conventional Compose file");
-
-    return { projectDirectory, composeFile: resolveSafeDestination(projectDirectory, composeFiles[0]) };
+    const manifestFiles = relativePaths.filter((path) => basename(path) === "manifest.json");
+    if (composeFiles.length + manifestFiles.length === 0) throw new Error("No supported project target found");
+    if (composeFiles.length > 1 || manifestFiles.length > 1 || (composeFiles.length > 0 && manifestFiles.length > 0)) {
+      throw new Error("Multiple project targets found; keep one Compose file or one manifest.json");
+    }
+    const target: TargetConfig = composeFiles.length === 1
+      ? { platform: "compose", composeFile: resolveSafeDestination(projectDirectory, composeFiles[0]) }
+      : { platform: "local-process", manifestPath: resolveSafeDestination(projectDirectory, manifestFiles[0]) };
+    return { projectDirectory, target };
   } catch (error) {
     await rm(projectDirectory, { recursive: true, force: true });
     throw error;

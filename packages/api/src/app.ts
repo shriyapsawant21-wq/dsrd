@@ -2,7 +2,7 @@ import express from "express";
 import multer from "multer";
 import { RunService } from "./run-service.js";
 import { RunStore } from "./run-store.js";
-import { materializeComposeProject } from "./project-upload.js";
+import { materializeProject } from "./project-upload.js";
 import type { FailureArtifact } from "@dsrd/contracts";
 
 function summarizeFailures(artifact?: FailureArtifact) {
@@ -19,9 +19,9 @@ export function createApp(store: RunStore, service: RunService) {
       if (!Array.isArray(req.files) || req.files.length === 0) {
         return res.status(400).json({ error: "Select a project folder containing one Compose file" });
       }
-      const { composeFile } = await materializeComposeProject(req.files, req.body.relativePaths);
+      const { target } = await materializeProject(req.files, req.body.relativePaths);
       const run = store.create();
-      void service.start(run.id, composeFile);
+      void service.start(run.id, target);
       return res.status(202).json({ runId: run.id, status: "queued" });
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid project upload" });

@@ -25,9 +25,9 @@ it("returns an uploaded run and reports that an unfinished artifact is unavailab
 
 it("starts the existing run service from a materialized project folder", async () => {
   const store = new RunStore();
-  let receivedComposeFile = "";
-  const app = createApp(store, new RunService(store, async (composeFile) => {
-    receivedComposeFile = composeFile;
+  let receivedTarget: { platform: string; composeFile?: string } | undefined;
+  const app = createApp(store, new RunService(store, async (target) => {
+    receivedTarget = target;
     return { status: "no_failure" };
   }));
 
@@ -39,7 +39,7 @@ it("starts the existing run service from a materialized project folder", async (
 
   expect(created.status).toBe(202);
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(receivedComposeFile).toMatch(/demo[\\/]compose\.yaml$/);
+  expect(receivedTarget).toMatchObject({ platform: "compose", composeFile: expect.stringMatching(/demo[\\/]compose\.yaml$/) });
 });
 
 it("rejects a folder upload before creating a run when no Compose file exists", async () => {
@@ -52,7 +52,7 @@ it("rejects a folder upload before creating a run when no Compose file exists", 
     .attach("projectFiles", Buffer.from("FROM node:20-alpine"), "Dockerfile");
 
   expect(response.status).toBe(400);
-  expect(response.body.error).toBe("No Compose file found in project folder");
+  expect(response.body.error).toBe("No supported project target found");
   expect(store.get("run-1")).toBeUndefined();
 });
 
