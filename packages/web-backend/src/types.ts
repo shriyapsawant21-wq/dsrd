@@ -1,4 +1,5 @@
 import type {
+  ExecutionPlatform,
   FailureArtifact,
   RunResult,
   Schedule,
@@ -10,6 +11,23 @@ export type SearchRequest = {
   target: TargetConfig;
   delayOptionsMs: number[];
 };
+
+export type PlatformResolver = (target: TargetConfig) => ExecutionPlatform;
+
+export type ScheduleProgress =
+  | {
+      type: "schedule_started";
+      attempt: number;
+      schedule: Schedule;
+    }
+  | {
+      type: "schedule_completed";
+      attempt: number;
+      schedule: Schedule;
+      result: RunResult;
+    };
+
+export type ProgressListener = (event: ScheduleProgress) => void;
 
 export type JobKind = "search" | "replay";
 export type JobStatus =
