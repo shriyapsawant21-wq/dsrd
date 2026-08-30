@@ -40,10 +40,18 @@ export type ReplayResult = {
 export async function discoverFailure(
   options: DiscoverFailureOptions
 ): Promise<DiscoveryResult> {
+  let executions = 0;
+  const runSchedule = async (target: TargetConfig, schedule: Schedule): Promise<RunResult> => {
+    if (options.maxSchedules !== undefined && executions >= options.maxSchedules) {
+      throw new Error("Maximum schedule execution budget exhausted");
+    }
+    executions += 1;
+    return options.runSchedule(target, schedule);
+  };
   const searchOptions: SearchOptions = { maxSchedules: options.maxSchedules };
   const searchResult = options.candidateStages !== undefined
-    ? await searchCandidateStages(options.candidateStages, options.target, options.runSchedule, searchOptions)
-    : await searchSchedules(options.candidates ?? [], options.target, options.runSchedule, searchOptions);
+    ? await searchCandidateStages(options.candidateStages, options.target, runSchedule, searchOptions)
+    : await searchSchedules(options.candidates ?? [], options.target, runSchedule, searchOptions);
   if (searchResult.status === "no_failure") {
     return searchResult;
   }
@@ -51,10 +59,10 @@ export async function discoverFailure(
   const minimizedSchedule = await minimizeSchedule(
     searchResult.failingSchedule,
     options.target,
-    options.runSchedule,
+    runSchedule,
     options.delayOptionsMs
   );
-  const minimizedRun = await options.runSchedule(options.target, minimizedSchedule);
+  const minimizedRun = await runSchedule(options.target, minimizedSchedule);
   if (minimizedRun.status !== "fail") {
     throw new Error("Minimization produced a schedule that did not reproduce the failure");
   }
