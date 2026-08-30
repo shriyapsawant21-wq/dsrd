@@ -1,5 +1,5 @@
 {
-  "name": "@dsrd/scheduler",
+  "name": "@dsrd/web-backend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,12 +9,10 @@
       "default": "./dist/index.js"
     }
   },
-  "bin": {
-    "race-debugger": "./dist/main.js"
-  },
   "dependencies": {
     "@dsrd/contracts": "0.1.0",
-    "commander": "^15.0.0",
+    "@dsrd/scheduler": "0.1.0",
+    "express": "^5.2.1",
     "zod": "^4.5.2"
   },
   "scripts": {
