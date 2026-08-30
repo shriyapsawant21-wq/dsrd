@@ -6,7 +6,7 @@ import { getDemoFailureDetail, getReportFailures } from "./report-data";
 import { getInitialTheme, toggleTheme, type Theme } from "./theme";
 import { ScrollCue } from "./ScrollCue";
 import "./folder-picker.css";
-import { configureDirectoryPicker } from "./folder-picker";
+import { configureDirectoryPicker, pickProjectDirectory } from "./folder-picker";
 
 type Screen = "landing" | "exploring" | "report" | "detail" | "no_failure" | "error";
 const initialProgress: Progress = { runId: "", phase: "queued", percentage: 0, message: "INITIALIZING", testedSchedules: 0, failureCount: 0 };
@@ -45,20 +45,24 @@ export default function App() {
       }, () => { setError("CONNECTION_TO_DEBUG_CORE_LOST"); setScreen("error"); });
     } catch (cause) { setError(cause instanceof Error ? cause.message : "UPLOAD_FAILED"); }
   };
-  const selectProject = (files?: FileList | null) => {
-    if (!files?.length) return;
-    const first = files[0] as File & { webkitRelativePath?: string };
-    const projectFiles = [...files];
+  const selectProject = (files?: Iterable<File> | null) => {
+    const projectFiles = files ? [...files] : [];
+    if (projectFiles.length === 0) return;
+    const first = projectFiles[0] as File & { webkitRelativePath?: string };
     setSelectedFolder((first.webkitRelativePath || first.name).split(/[\\/]/)[0]);
     setSelectedFiles(projectFiles);
     const platforms = detectProjectPlatforms(projectFiles);
     setAvailablePlatforms(platforms);
     setError(platforms.length === 0 ? "PROJECT_TARGET_NOT_FOUND" : "");
   };
-  const openProjectPicker = () => {
-    if (!input.current) return;
-    configureDirectoryPicker(input.current);
-    input.current.click();
+  const openProjectPicker = async () => {
+    try {
+      const files = await pickProjectDirectory();
+      if (files.length > 0) { selectProject(files); return; }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+    }
+    if (input.current) { configureDirectoryPicker(input.current); input.current.click(); }
   };
   const openDetail = async (failureId: string) => { if (!run) return; try { setDetail(await getFailure(run.id, failureId)); } catch { setDetail(getDemoFailureDetail()); } setScreen("detail"); };
   const reset = () => { window.scrollTo({ top: 0, behavior: "auto" }); setScreen("landing"); setRun(undefined); setDetail(undefined); setSelectedFolder(""); setSelectedFiles([]); setAvailablePlatforms([]); setError(""); };
