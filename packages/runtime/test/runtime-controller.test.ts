@@ -339,6 +339,34 @@ describe("DockerRuntimeController", () => {
     expect(compose.actions).toEqual(["reset", "start:api", "started:api", "stop"]);
   });
 
+  it("skips cleanup when an aborted Compose operation does not settle", async () => {
+    const compose = new BlockingStartCompose();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new BlockingDelay(),
+      observer: new RecordingObserver(),
+      runTimeoutMs: 10,
+      operationDrainTimeoutMs: 10,
+    });
+    const run = controller.runSchedule({
+      id: "non-closing-start",
+      perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
+    }, ["api", "postgres"]);
+    const failure = run.catch((error: unknown) => error);
+
+    await compose.waitForStart();
+    try {
+      const outcome = await Promise.race([
+        failure,
+        new Promise<"still-running">((resolve) => setTimeout(() => resolve("still-running"), 100)),
+      ]);
+      expect(outcome).toBeInstanceOf(AggregateError);
+      expect(compose.actions).not.toContain("stop");
+    } finally {
+      compose.releaseStart();
+    }
+  });
+
   it("does not observe after a timed-out start settles", async () => {
     const compose = new BlockingStartCompose();
     const observer = new RecordingObserver();

@@ -26,6 +26,7 @@ export type DockerRuntimeControllerOptions = {
   observer: RunObserver;
   readinessDelay?: ReadinessDelayAdapter;
   runTimeoutMs?: number;
+  operationDrainTimeoutMs?: number;
 };
 
 interface ComposeOperationTracker {
@@ -42,13 +43,22 @@ export class RunTimeoutError extends Error {
   }
 }
 
+export class ComposeOperationDrainTimeoutError extends Error {
+  constructor(readonly scheduleId: string, readonly timeoutMs: number) {
+    super(`Compose operations for schedule ${scheduleId} did not settle after ${timeoutMs}ms`);
+    this.name = "ComposeOperationDrainTimeoutError";
+  }
+}
+
 export class DockerRuntimeController {
   constructor(private readonly options: DockerRuntimeControllerOptions) {}
 
   async runSchedule(schedule: Schedule, serviceOrder: string[]): Promise<RunResult> {
     this.validateSchedule(schedule, serviceOrder);
     const timeoutMs = this.options.runTimeoutMs ?? 30_000;
+    const operationDrainTimeoutMs = this.options.operationDrainTimeoutMs ?? 1_000;
     validateDelayMs(timeoutMs, "runTimeoutMs");
+    validateDelayMs(operationDrainTimeoutMs, "operationDrainTimeoutMs");
     if (timeoutMs === 0) {
       throw new RangeError("runTimeoutMs must be greater than zero");
     }
@@ -74,7 +84,17 @@ export class DockerRuntimeController {
       runFailure = error;
     }
     observationAbort.abort();
-    await Promise.allSettled(operations.inFlight);
+    try {
+      await this.drainComposeOperations(operations, schedule.id, operationDrainTimeoutMs);
+    } catch (drainFailure) {
+      if (runFailure !== undefined) {
+        throw new AggregateError(
+          [runFailure, drainFailure],
+          `Schedule ${schedule.id} failed and Compose cleanup was skipped`,
+        );
+      }
+      throw drainFailure;
+    }
 
     try {
       await this.cleanup();
@@ -197,6 +217,26 @@ export class DockerRuntimeController {
     tracked = operation.finally(() => tracker.inFlight.delete(tracked));
     tracker.inFlight.add(tracked);
     return tracked;
+  }
+
+  private async drainComposeOperations(
+    tracker: ComposeOperationTracker,
+    scheduleId: string,
+    timeoutMs: number,
+  ): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const drain = Promise.allSettled([...tracker.inFlight]).then(() => undefined);
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(
+        () => reject(new ComposeOperationDrainTimeoutError(scheduleId, timeoutMs)),
+        timeoutMs,
+      );
+    });
+    try {
+      await Promise.race([drain, timeout]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   private async startIndependently(
