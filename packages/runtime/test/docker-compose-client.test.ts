@@ -77,6 +77,22 @@ describe("DockerComposeClient lifecycle", () => {
     expect(runner.calls[0]?.args).toEqual(["compose", "up", "-d", "api"]);
   });
 
+  it("forwards an abort signal when starting a service", async () => {
+    const runner = new RecordingRunner();
+    const client = new DockerComposeClient({ projectDirectory: "C:/fixture", runner });
+    const controller = new AbortController();
+    let receivedSignal: AbortSignal | undefined;
+    runner.run = async (invocation: CommandInvocation, signal?: AbortSignal) => {
+      runner.calls.push(invocation);
+      receivedSignal = signal;
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+
+    await client.startService("api", controller.signal);
+
+    expect(receivedSignal).toBe(controller.signal);
+  });
+
   it("rejects unsafe service names before invoking Docker", async () => {
     const runner = new RecordingRunner();
     const client = new DockerComposeClient({ projectDirectory: "C:/fixture", runner });
@@ -157,4 +173,3 @@ describe("DockerComposeClient lifecycle", () => {
     ]);
   });
 });
-

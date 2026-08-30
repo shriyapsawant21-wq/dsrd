@@ -280,6 +280,35 @@ describe("DockerRuntimeController", () => {
     vi.useRealTimers();
   });
 
+  it("aborts a stalled service start before cleanup when the run times out", async () => {
+    vi.useFakeTimers();
+    const compose = new RecordingCompose();
+    let startSignal: AbortSignal | undefined;
+    compose.startService = async (_service: string, signal?: AbortSignal) => {
+      startSignal = signal;
+      await new Promise<void>((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    };
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer: new RecordingObserver(),
+      runTimeoutMs: 100,
+    });
+
+    const run = controller.runSchedule({ id: "start-stalled", perturbations: [] }, ["api"]);
+    const assertion = expect(run).rejects.toThrow(
+      "Schedule start-stalled timed out after 100ms",
+    );
+    await vi.advanceTimersByTimeAsync(100);
+
+    await assertion;
+    expect(startSignal?.aborted).toBe(true);
+    expect(compose.actions.at(-1)).toBe("stop");
+    vi.useRealTimers();
+  });
+
   it("aborts observer work before cleanup when the run times out", async () => {
     vi.useFakeTimers();
     const compose = new RecordingCompose();

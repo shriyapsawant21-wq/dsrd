@@ -11,7 +11,7 @@ import type { ReadinessDelayAdapter } from "./readiness-delay.js";
 
 export interface ComposeRuntime {
   resetStack(): Promise<void>;
-  startService(service: string): Promise<void>;
+  startService(service: string, signal?: AbortSignal): Promise<void>;
   collectLogs(): Promise<string[]>;
   listServices(): Promise<ComposeServiceState[]>;
   stopStack(): Promise<void>;
@@ -110,7 +110,7 @@ export class DockerRuntimeController {
     for (const service of serviceOrder) {
       const startDelayMs = startDelays.get(service) ?? 0;
       await this.options.delay.wait(startDelayMs);
-      await this.options.compose.startService(service);
+      await this.options.compose.startService(service, signal);
     }
 
     const snapshot: ObservationSnapshot = {

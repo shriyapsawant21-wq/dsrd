@@ -40,12 +40,12 @@ export class DockerComposeClient {
     await this.runCompose(["down", "--volumes", "--remove-orphans"]);
   }
 
-  async startService(service: string): Promise<void> {
+  async startService(service: string, signal?: AbortSignal): Promise<void> {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(service)) {
       throw new Error(`Invalid Compose service name: ${service}`);
     }
 
-    await this.runCompose(["up", "-d", service]);
+    await this.runCompose(["up", "-d", service], signal);
   }
 
   async collectLogs(): Promise<string[]> {
@@ -74,7 +74,7 @@ export class DockerComposeClient {
     }));
   }
 
-  private async runCompose(args: string[]): Promise<CommandResult> {
+  private async runCompose(args: string[], signal?: AbortSignal): Promise<CommandResult> {
     const invocation: CommandInvocation = {
       command: "docker",
       args: [
@@ -86,7 +86,7 @@ export class DockerComposeClient {
       ],
       cwd: this.options.projectDirectory
     };
-    const result = await this.options.runner.run(invocation);
+    const result = await this.options.runner.run(invocation, signal);
     if (result.exitCode !== 0) {
       throw new DockerCommandError(invocation, result);
     }
@@ -108,4 +108,3 @@ export class DockerComposeClient {
     }
   }
 }
-

@@ -64,11 +64,11 @@ Next checkpoint: C5
 ## C5 — Minimized artifact and replay
 Status: blocked
 Owner: Akil, Riya, Shriya
-Evidence: v1 fake replay passes; generic real replay not run
+Evidence: Blocked: C4 has not produced fresh verification of a normal Compose pass and a saved real discovered failure artifact; v1 fake replay passes, but generic real replay cannot run yet.
 Commit/PR: none
 Remaining work: save v2 artifact and reproduce failure through adapter replay
 Dependencies: C4
-Blockers: no real generic failure artifact
+Blockers: awaiting the C4 team integration output: verified normal pass -> real discovered failure -> saved v2 artifact
 Next checkpoint: C6
 
 ## C6 — Local-process adapter
