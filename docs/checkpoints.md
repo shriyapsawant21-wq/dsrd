@@ -72,13 +72,13 @@ Blockers: none
 Next checkpoint: C6
 
 ## C6 — Local-process adapter
-Status: planned
+Status: complete
 Owner: Riya, Shriya, Akil
-Evidence: not started
-Commit/PR: none
-Remaining work: add manifest-defined local workloads, proof fixture, and scheduler CLI target selection
-Dependencies: stable C4 and C5
-Blockers: generic real pipeline not yet stable
+Evidence: Implemented: local-process baseline, discovery, minimization, artifact, and replay verified; moving to C7 admission review. Fresh `npm test && npm run build && npm run typecheck` passed (including the local-process normal-pass, discovered failure, minimized artifact, and replay test).
+Commit/PR: C6 branch commit (reported after commit)
+Remaining work: none
+Dependencies: ready
+Blockers: none
 Next checkpoint: C7
 
 ## C7 — Kubernetes adapter
