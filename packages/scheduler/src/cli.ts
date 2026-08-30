@@ -1,7 +1,8 @@
 import { Command } from "commander";
+import { stat } from "node:fs/promises";
 
 import { loadFailureArtifact, saveFailureArtifact } from "./artifact.js";
-import { generateCandidates } from "./candidates.js";
+import { generateCandidates, generateFocusedCandidates } from "./candidates.js";
 import { fakePlatform } from "./fake-platform.js";
 import { discoverFailure, replayFailure } from "./orchestrator.js";
 import { chooseMenuAction, createReadlinePrompt, type PromptAdapter } from "./prompt.js";
@@ -9,6 +10,7 @@ import { renderDashboard, renderResultSummary } from "./presentation.js";
 import type { ExecutionPlatform, TargetConfig } from "@dsrd/contracts";
 
 const defaultDelayOptionsMs = [0, 500, 1000, 1500, 2000, 3000];
+const quickDelayOptionsMs = [0, 2500];
 
 export type CliDependencies = {
   platform: ExecutionPlatform;
@@ -57,19 +59,35 @@ export async function runCli(
     .option("-p, --platform <platform>", "target platform", "local-process")
     .option("-t, --target <path>", "target manifest or compose file", "race.json")
     .option("-d, --delay-options <milliseconds>", "comma-separated delay values")
+    .option("--quick", "test one perturbation at a time with a small delay set")
     .option("-o, --output <path>", "artifact output path", "failure.json")
-    .action(async (options: { platform: string; target: string; delayOptions?: string; output: string }) => {
+    .action(async (options: { platform: string; target: string; delayOptions?: string; quick?: boolean; output: string }) => {
       const delayOptionsMs = options.delayOptions
         ? parseDelayOptions(options.delayOptions)
-        : defaultDelayOptionsMs;
+        : options.quick ? quickDelayOptionsMs : defaultDelayOptionsMs;
       const target = targetConfig(options.platform, options.target);
       const workloads = await dependencies.platform.discover(target);
-      const candidates = generateCandidates(workloads, delayOptionsMs);
+      const candidates = options.quick
+        ? generateFocusedCandidates(workloads, delayOptionsMs)
+        : generateCandidates(workloads, delayOptionsMs);
+      let runNumber = 0;
+      const runWithProgress = async (runTarget: TargetConfig, schedule: Parameters<typeof runSchedule>[1]) => {
+        runNumber += 1;
+        dependencies.log(`RUN ${runNumber.toString().padStart(2, "0")}  ${describeSchedule(schedule)}`);
+        const runResult = await runSchedule(runTarget, schedule);
+        dependencies.log(runResult.status === "pass" ? "PASS" : "FAIL — race detected");
+        dependencies.log("");
+        return runResult;
+      };
+      dependencies.log(options.quick
+        ? `Starting quick scan (${candidates.length} schedules maximum).`
+        : `Starting thorough scan (${candidates.length} schedules maximum).`);
+      dependencies.log("");
       const result = await discoverFailure({
         candidates,
         delayOptionsMs,
         target,
-        runSchedule
+        runSchedule: runWithProgress
       });
 
       if (result.status === "no_failure") {
@@ -116,17 +134,23 @@ async function collectGuidedArgs(
   log: (message: string) => void
 ): Promise<string[]> {
   if (action === "search") {
-    const platform = (await prompt.ask("Platform [local-process]: ")).trim() || "local-process";
-    const target = (await prompt.ask("Target [race.json]: ")).trim() || "race.json";
-    const delayOptions = (await prompt.ask("Delay options (comma-separated, optional): ")).trim();
-    const output = (await prompt.ask("Replay artifact [failure.json]: ")).trim() || "failure.json";
+    log("\nWhat do you want to test?");
+    log("[1] Docker Compose");
+    log("[2] Local process");
+    const platform = await choosePlatform(prompt, log);
+    const target = await chooseExistingTarget(platform, prompt, log);
+    log("\nScan mode:");
+    log("[1] Quick scan — recommended");
+    log("[2] Thorough scan");
+    const quick = await chooseQuickMode(prompt, log);
+    const output = cleanPath(await prompt.ask("Save results as [failure.json]: ")) || "failure.json";
     return [
       "search",
       "--platform",
       platform,
       "--target",
       target,
-      ...(delayOptions ? ["--delay-options", delayOptions] : []),
+      ...(quick ? ["--quick"] : []),
       "--output",
       output
     ];
@@ -137,6 +161,54 @@ async function collectGuidedArgs(
     if (artifactPath) return ["replay", artifactPath];
     log("Artifact path is required.");
   }
+}
+
+async function choosePlatform(prompt: PromptAdapter, log: (message: string) => void): Promise<"compose" | "local-process"> {
+  while (true) {
+    const answer = (await prompt.ask("Choose a platform [1]: ")).trim();
+    if (answer === "" || answer === "1") return "compose";
+    if (answer === "2") return "local-process";
+    log("Choose 1 for Docker Compose or 2 for local process.");
+  }
+}
+
+async function chooseQuickMode(prompt: PromptAdapter, log: (message: string) => void): Promise<boolean> {
+  while (true) {
+    const answer = (await prompt.ask("Choose a scan mode [1]: ")).trim();
+    if (answer === "" || answer === "1") return true;
+    if (answer === "2") return false;
+    log("Choose 1 for quick scan or 2 for thorough scan.");
+  }
+}
+
+async function chooseExistingTarget(
+  platform: "compose" | "local-process",
+  prompt: PromptAdapter,
+  log: (message: string) => void
+): Promise<string> {
+  const message = platform === "compose" ? "Compose file path: " : "Local manifest path: ";
+  while (true) {
+    const path = cleanPath(await prompt.ask(message));
+    if (!path) { log("A file path is required."); continue; }
+    try {
+      if ((await stat(path)).isFile()) return path;
+    } catch { /* reported below */ }
+    log(`File not found: ${path}`);
+  }
+}
+
+function cleanPath(value: string): string {
+  const path = value.trim();
+  if (path.length >= 2 && ((path.startsWith('"') && path.endsWith('"')) || (path.startsWith("'") && path.endsWith("'")))) {
+    return path.slice(1, -1);
+  }
+  return path;
+}
+
+function describeSchedule(schedule: { perturbations: Array<{ workloadId: string; phase: string; delayMs: number }> }): string {
+  if (schedule.perturbations.length === 0) return "Testing baseline...";
+  const [first, ...remaining] = schedule.perturbations;
+  return `Delaying ${first.workloadId} ${first.phase} by ${first.delayMs}ms${remaining.length ? ` (+${remaining.length} more)` : ""}...`;
 }
 
 function targetConfig(platform: string, targetPath: string): TargetConfig {

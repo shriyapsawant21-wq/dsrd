@@ -19,6 +19,26 @@ export function generateCandidates(
   }));
 }
 
+/** Generates a fast baseline plus isolated single-perturbation schedules. */
+export function generateFocusedCandidates(
+  workloads: readonly Workload[],
+  delayOptionsMs: readonly number[]
+): Schedule[] {
+  const delays = [...new Set(delayOptionsMs)].filter((delayMs) => delayMs > 0);
+  const perturbations = workloads.flatMap((workload) =>
+    workload.perturbablePhases.flatMap((phase) =>
+      delays.map((delayMs) => ({ workloadId: workload.id, phase, delayMs }))
+    )
+  );
+  return [
+    { id: "quick-000", perturbations: [] },
+    ...perturbations.map((perturbation, index) => ({
+      id: `quick-${(index + 1).toString().padStart(3, "0")}`,
+      perturbations: [perturbation]
+    }))
+  ];
+}
+
 function cartesianProduct<T>(sets: readonly (readonly T[])[]): T[][] {
   return sets.reduce<T[][]>(
     (combinations, values) =>
