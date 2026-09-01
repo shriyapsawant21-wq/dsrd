@@ -1,6 +1,6 @@
 # Shared Contracts
 
-These interfaces are the boundary between workstreams. Implement them once in `packages/contracts/src/index.ts` and import them everywhere. This is contract version 2; no package may retain a local service-keyed schedule type.
+These interfaces are the boundary between packages. Implement them once in `packages/contracts/src/index.ts` and import them everywhere. This is contract version 2; no package may retain a local service-keyed schedule type.
 
 ```ts
 export type Workload = {
@@ -36,11 +36,11 @@ export interface ExecutionPlatform {
 }
 ```
 
-Riya owns platform implementations. The scheduler consumes injected `run` and `replay` functions and must not depend on Docker, child processes, or Kubernetes clients.
+Platform implementations live in runtime. The scheduler consumes injected `run` and `replay` functions and must not depend on Docker, child processes, or Kubernetes clients.
 
 ## Evidence Boundary
 
-`RunResult.status` remains owned by Shriya's deterministic oracle. Execution and reset errors are not race failures. Timeline events retain normalized workload identity in their `service` field for v2 compatibility.
+`RunResult.status` is determined by the deterministic proof oracle. Execution and reset errors are not race failures. Timeline events retain normalized workload identity in their `service` field for v2 compatibility.
 
 ## Replay Artifact
 
@@ -60,4 +60,4 @@ Artifacts contain no credentials, tokens, kubeconfig contents, or secret environ
 
 ## Migration Rule
 
-All three owners review a public-contract change before merging it. Migrate scheduler, runtime, and proof consumers in their own fresh sessions after this contract commits. Do not restore local copies of `Schedule`, `RunResult`, `TimelineEvent`, or `FailureArtifact`.
+Review every scheduler, runtime, proof, API, and UI consumer of a public-contract change before merging it. Do not restore local copies of `Schedule`, `RunResult`, `TimelineEvent`, or `FailureArtifact`.

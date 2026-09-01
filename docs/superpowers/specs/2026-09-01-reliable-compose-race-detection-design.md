@@ -11,11 +11,11 @@ separate outcomes and must never create a race artifact.
 ## Scope and constraints
 
 - Keep `packages/contracts` as the single source of public types.
-- Scheduler owns exploration, confidence checks, minimization, artifacts, CLI,
-  and replay reporting.
-- Runtime owns Compose preflight, lifecycle, controlled startup, collection,
+- Scheduler contains exploration, confidence checks, minimization, artifacts,
+  CLI, and replay reporting.
+- Runtime contains Compose preflight, lifecycle, controlled startup, collection,
   timeout handling, and cleanup.
-- Proof owns readiness/terminal-job observation, timeline normalization, and
+- Proof contains readiness/terminal-job observation, timeline normalization, and
   deterministic classification.
 - Discovery and replay must call the same platform/runtime/proof path.
 - Keep the current local-process fixture as a fast test path.

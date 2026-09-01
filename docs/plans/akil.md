@@ -1,8 +1,8 @@
-# Akil Plan - Schedule Exploration Engine
+# Schedule Exploration Component Plan
 
-## Ownership
-
-Akil owns the debugger brain: generating startup schedules, running experiments through the Docker controller, finding failures, minimizing the failing schedule, and producing replayable output.
+Any contributor may work on this component. It covers generating startup
+schedules, running experiments through the Docker controller, finding failures,
+minimizing the failing schedule, and producing replayable output.
 
 ## Main Goal
 
@@ -14,8 +14,8 @@ Build the part of the system that answers:
 
 1. Define the schedule format.
 2. Generate candidate startup schedules.
-3. Run schedules through Riya's Docker Compose controller.
-4. Receive `RunResult` data from Shriya's observability layer.
+3. Run schedules through the Docker Compose controller.
+4. Receive `RunResult` data from the observability layer.
 5. Detect the first failing schedule.
 6. Minimize the failing schedule.
 7. Save the result as `failure.json`.
@@ -120,7 +120,7 @@ The API fails when PostgreSQL readiness is delayed by at least 1800ms while the 
 
 ## Day 2 Tasks
 
-- Call Riya's `runSchedule(schedule)` function.
+- Call runtime's `runSchedule(schedule)` function.
 - Stop after first failing schedule.
 - Save failing schedule to JSON.
 - Implement basic minimization.
@@ -135,7 +135,7 @@ The API fails when PostgreSQL readiness is delayed by at least 1800ms while the 
 
 ## Done Criteria
 
-Akil's part is done when this works:
+This component is done when this works:
 
 ```bash
 race-debugger search
@@ -148,4 +148,3 @@ Failure found after 7 schedules.
 Minimal cause: API starts before PostgreSQL is ready.
 Replay: race-debugger replay failure.json
 ```
-

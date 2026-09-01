@@ -1,8 +1,8 @@
-# Shriya Plan - Observability, Failure Detection, and Demo Stack
+# Observability, Failure Detection, and Demo Stack Plan
 
-## Ownership
-
-Shriya owns the proof layer: the demo application, readiness checks, failure detection, logs, and timeline events that explain what happened.
+Any contributor may work on this component. It covers the proof layer: the demo
+application, readiness checks, failure detection, logs, and timeline events
+that explain what happened.
 
 ## Main Goal
 
@@ -35,7 +35,7 @@ Build the part of the system that answers:
 
 - HTTP readiness checks using `fetch`
 - TCP checks using Node's `net` module
-- Docker logs through Riya's Docker controller
+- Docker logs through the Docker controller
 - JSON timeline output
 
 ## Demo Stack
@@ -157,7 +157,7 @@ startup failed
 - Implement HTTP and TCP readiness checks.
 - Implement pass/fail detection.
 - Emit timeline events as JSON.
-- Connect event output to Akil's result contract.
+- Connect event output to the shared result contract.
 
 ## Day 3 Tasks
 
@@ -168,7 +168,7 @@ startup failed
 
 ## Done Criteria
 
-Shriya's part is done when one run can produce:
+This component is done when one run can produce:
 
 ```json
 {
@@ -193,4 +193,3 @@ Shriya's part is done when one run can produce:
   ]
 }
 ```
-

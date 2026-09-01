@@ -50,13 +50,16 @@ Runtime Controller -> Event Collector -> Oracle |
               Timeline / UI
 ```
 
-## Team Division
+## Component Boundaries
 
-| Owner | Area | Main output |
-|---|---|---|
-| Akil | Schedule exploration | candidate schedules, minimization, failure artifact, CLI |
-| Riya | Docker runtime | `runSchedule(schedule)` and replay execution |
-| Shriya | Proof layer | demo fixture, oracle, `TimelineEvent[]`, reliable `RunResult` |
+Any contributor may work on any component. Keep the following boundaries clear
+so the pipeline remains testable and integrable:
+
+| Component | Main output |
+|---|---|
+| Schedule exploration | candidate schedules, minimization, failure artifact, CLI |
+| Docker runtime | `runSchedule(schedule)` and replay execution |
+| Proof layer | demo fixture, oracle, `TimelineEvent[]`, reliable `RunResult` |
 
 ## Technology
 - Node.js + TypeScript
@@ -138,33 +141,33 @@ race-debugger replay failure.json
 Shared:
 - commit contracts and interfaces first
 
-Akil:
+Schedule exploration:
 - schedule schemas
 - candidate generation
 - search loop against mock runtime
 
-Riya:
+Docker runtime:
 - Docker runner
 - stop/reset
 - service startup delays
 
-Shriya:
+Proof layer:
 - demo Compose stack
 - intentional race
 - basic readiness probes
 
 ## Day 2
-Akil:
+Schedule exploration:
 - connect search to real `runSchedule`
 - first failing candidate
 - minimization
 
-Riya:
+Docker runtime:
 - reliable reset between runs
 - logs/metadata
 - execution from provided schedule
 
-Shriya:
+Proof layer:
 - deterministic oracle
 - timeline events
 - tune fixture reliability

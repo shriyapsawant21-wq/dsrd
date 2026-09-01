@@ -1,8 +1,8 @@
-# Riya Plan - Docker Compose Control and Delay Injection
+# Docker Compose Control and Delay Injection Plan
 
-## Ownership
-
-Riya owns the Docker execution layer: starting, stopping, resetting, delaying, and replaying Docker Compose services in a repeatable way.
+Any contributor may work on this component. It covers the Docker execution
+layer: starting, stopping, resetting, delaying, and replaying Docker Compose
+services in a repeatable way.
 
 ## Main Goal
 
@@ -17,8 +17,8 @@ Build the part of the system that answers:
 3. Reset containers, networks, and volumes when needed.
 4. Start services with controlled delays.
 5. Inject readiness delays for selected services.
-6. Provide a `runSchedule(schedule)` function for Akil.
-7. Provide logs and Docker metadata to Shriya's observability layer.
+6. Provide a `runSchedule(schedule)` function for scheduler.
+7. Provide logs and Docker metadata to the observability layer.
 8. Implement replay execution from `failure.json`.
 
 ## Tech Stack
@@ -89,7 +89,7 @@ For every schedule:
 1. Reset stack.
 2. Record run start time.
 3. Start services according to schedule.
-4. Wait for Shriya's pass/fail signal.
+4. Wait for the proof layer's pass/fail signal.
 5. Collect logs.
 6. Stop stack.
 7. Return result.
@@ -119,7 +119,7 @@ For every schedule:
 
 ## Done Criteria
 
-Riya's part is done when this works:
+This component is done when this works:
 
 ```bash
 race-debugger replay failure.json
@@ -131,4 +131,3 @@ And it:
 2. Starts services with the saved delays.
 3. Reproduces the same failure.
 4. Cleans up after the run.
-

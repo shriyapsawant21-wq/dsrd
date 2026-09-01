@@ -47,19 +47,22 @@ For the supplied local Kind fixture, create/select the `kind-dsrd-c7` context
 before running the Kubernetes command. No kubeconfig, token, or cluster is
 needed for Compose and local-process workflows.
 
-## Team
-- Akil — schedule exploration, minimization, CLI
-- Riya — Docker Compose runtime and delay injection
-- Shriya — observability, failure oracle, demo fixture
+## Components
+
+Any contributor may work on any component:
+
+- Schedule exploration, minimization, and CLI
+- Docker Compose runtime and delay injection
+- Observability, failure oracle, and demo fixture
 
 ## Documentation
 - [`AGENTS.md`](AGENTS.md) — shared Codex/project rules
 - [`docs/plan.md`](docs/plan.md) — overall architecture and hackathon plan
 - [`docs/contracts/shared-contracts.md`](docs/contracts/shared-contracts.md) — shared interfaces
 - [`docs/integration.md`](docs/integration.md) — team integration workflow
-- [`docs/plans/akil.md`](docs/plans/akil.md) — Akil plan
-- [`docs/plans/riya.md`](docs/plans/riya.md) — Riya plan
-- [`docs/plans/shriya.md`](docs/plans/shriya.md) — Shriya plan
+- [`docs/plans/akil.md`](docs/plans/akil.md) — schedule exploration plan
+- [`docs/plans/riya.md`](docs/plans/riya.md) — runtime plan
+- [`docs/plans/shriya.md`](docs/plans/shriya.md) — proof-layer plan
 - [`docs/runbooks/demo.md`](docs/runbooks/demo.md) — golden demo runbook
 
 ## Target CLI
