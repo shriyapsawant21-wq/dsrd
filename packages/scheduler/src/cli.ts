@@ -119,7 +119,7 @@ export async function runCli(
         maxSchedules: maxRuns,
       });
 
-      if (result.status === "no_failure") {
+      if (result.status !== "found_failure") {
         dependencies.log(
           renderResultSummary({ status: "no-failure", testedSchedules: result.testedSchedules })
         );

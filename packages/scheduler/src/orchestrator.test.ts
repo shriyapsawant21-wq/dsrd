@@ -6,6 +6,23 @@ import { discoverFailure, replayFailure } from "./orchestrator.js";
 describe("orchestration", () => {
   const target: TargetConfig = { platform: "local-process", manifestPath: "race.json" };
 
+  it("rejects an unhealthy empty-schedule baseline without publishing an artifact", async () => {
+    const result = await discoverFailure({
+      candidates: [{ id: "candidate", perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }] }],
+      delayOptionsMs: [0, 1000],
+      target,
+      runSchedule: async (_target, schedule) => ({
+        scheduleId: schedule.id,
+        status: "workload_failure",
+        failureReason: "target is already broken",
+        events: [],
+        logs: [],
+      }),
+    });
+
+    expect(result).toEqual({ status: "target_unhealthy", testedSchedules: 1 });
+  });
+
   it("searches, minimizes, and produces a target-bearing artifact from runner evidence", async () => {
     const original: Schedule = {
       id: "schedule-001",
@@ -25,7 +42,7 @@ describe("orchestration", () => {
 
     expect(result).toEqual({
       status: "found_failure",
-      testedSchedules: 2,
+      testedSchedules: 10,
       artifact: {
         version: 2,
         createdAt: "2026-08-29T00:00:00.000Z",
