@@ -9,8 +9,10 @@ export default defineConfig({
     exclude: [
       ...configDefaults.exclude,
       "**/.worktrees/**",
+      "**/worktrees/**",
       "**/node_modules/**",
       "**/dist/**",
+      "**/build/**",
     ],
   },
 });
