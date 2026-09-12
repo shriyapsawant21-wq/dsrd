@@ -212,22 +212,28 @@ export async function runCli(
     .option("--json", "emit one machine-readable terminal result")
     .option("-o, --output <path>", "artifact output path", "failure.json")
     .action(async (options: { checkout?: string; git?: string; ref: string; targetId?: string; config?: string; json?: boolean; output: string }) => {
-      if ((options.checkout === undefined) === (options.git === undefined)) throw new Error("Provide exactly one of --checkout or --git");
-      const result = await createOnboardingService({ platform: dependencies.platform }).search({
-        repository: options.checkout === undefined
-          ? { kind: "git", url: options.git!, ref: options.ref, submodules: false, lfs: false }
-          : { kind: "checkout", path: options.checkout },
-        targetId: options.targetId,
-        configPath: options.config,
-      });
-      exitCode = result.status === "found_failure" || result.status === "no_failure" ? 0 : discoveryExitCode(result.status);
-      if (result.status === "found_failure") {
-        const artifactPath = resolve(options.output);
-        await saveFailureArtifact(artifactPath, result.artifact);
-        dependencies.log(options.json ? JSON.stringify({ status: result.status, exitCode, testedSchedules: result.testedSchedules, artifactPath }) : `Failure artifact saved: ${artifactPath}`);
-        return;
+      try {
+        if ((options.checkout === undefined) === (options.git === undefined)) throw new Error("Provide exactly one of --checkout or --git");
+        const result = await createOnboardingService({ platform: dependencies.platform }).search({
+          repository: options.checkout === undefined
+            ? { kind: "git", url: options.git!, ref: options.ref, submodules: false, lfs: false }
+            : { kind: "checkout", path: options.checkout },
+          targetId: options.targetId,
+          configPath: options.config,
+        });
+        exitCode = result.status === "found_failure" || result.status === "no_failure" ? 0 : discoveryExitCode(result.status);
+        if (result.status === "found_failure") {
+          const artifactPath = resolve(options.output);
+          await saveFailureArtifact(artifactPath, result.artifact);
+          dependencies.log(options.json ? JSON.stringify({ status: result.status, exitCode, testedSchedules: result.testedSchedules, artifactPath }) : `Failure artifact saved: ${artifactPath}`);
+          return;
+        }
+        dependencies.log(options.json ? JSON.stringify({ status: result.status, exitCode, testedSchedules: result.testedSchedules, ...("diagnostics" in result ? { diagnostics: result.diagnostics } : {}) }) : result.status);
+      } catch (error) {
+        if (!options.json) throw error;
+        exitCode = 5;
+        dependencies.log(JSON.stringify({ status: "execution_error", exitCode }));
       }
-      dependencies.log(options.json ? JSON.stringify({ status: result.status, exitCode, testedSchedules: result.testedSchedules, ...("diagnostics" in result ? { diagnostics: result.diagnostics } : {}) }) : result.status);
     });
 
   program

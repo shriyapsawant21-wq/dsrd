@@ -122,6 +122,18 @@ describe("race-debugger CLI", () => {
     await expect(loadFailureArtifact(artifactPath)).resolves.toMatchObject({ version: 3, repository: { resolvedRevision: revision } });
   });
 
+  it("emits one JSON terminal error for malformed onboarding Git input", async () => {
+    const output: string[] = [];
+
+    await expect(runCli(["onboard-search", "--git", "not-a-url", "--json"], {
+      platform: signaturePlatform(),
+      log: (message) => output.push(message),
+    })).resolves.toBe(5);
+
+    expect(output).toHaveLength(1);
+    expect(JSON.parse(output[0]!)).toMatchObject({ status: "execution_error", exitCode: 5 });
+  });
+
   it("delegates scriptable searches to the shared discovery service", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-shared-"));
     directories.push(directory);
