@@ -9,6 +9,7 @@ import type {
 } from "./observer.js";
 import type { ReadinessDelayAdapter } from "./readiness-delay.js";
 import type { StartDelayGate } from "./start-delay-gate.js";
+import { DockerCommandError } from "./docker-compose-client.js";
 
 export interface ComposeRuntime {
   prepare(signal?: AbortSignal): Promise<void>;
@@ -362,6 +363,8 @@ export class DockerRuntimeController {
       ? "run_timeout"
       : errors.some((failure) => failure instanceof ComposeOperationDrainTimeoutError)
         ? "compose_operation_drain_timeout"
+        : errors.some(isHostPortConflict)
+          ? "host_port_conflict"
         : "runtime_operation_failed";
     return {
       scheduleId,
@@ -397,4 +400,8 @@ export class DockerRuntimeController {
       );
     }
   }
+}
+
+function isHostPortConflict(error: unknown): boolean {
+  return error instanceof DockerCommandError && /(?:port is already allocated|address already in use|bind for)/i.test(error.stderr);
 }
