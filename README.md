@@ -105,3 +105,83 @@ The current upload contract accepts one self-contained Compose file. Compose pro
 
 ## MVP Definition of Done
 A bug is only considered discovered when a normally working fixture fails under an explored schedule, the failure is automatically detected, the schedule is minimized, and replay reproduces the same expected failure.
+
+## Reproducible validation
+
+Run these checks from the repository root after every runtime or scheduler
+change. The test script builds the execution packages first, then runs each
+workspace in isolation (nested worktrees and build output are excluded).
+
+```bash
+npm install
+npm run typecheck
+npm test
+```
+
+### Local-process golden path
+
+The local fixture is deterministic and does not require Docker. First verify
+that normal startup is healthy, then run discovery and replay:
+
+```bash
+npm run build:execution
+node packages/scheduler/dist/cli.js search \
+  --platform local-process \
+  --target fixtures/local-startup-race/manifest.json \
+  --delay-options 0,100 \
+  --output failure.json
+node packages/scheduler/dist/cli.js replay failure.json
+```
+
+Discovery is valid only when the baseline passes, a perturbed schedule produces
+machine-verifiable workload evidence, minimization completes, and replay
+reproduces the same failure. A generic `timeout` or `ECONNREFUSED` log line is
+timeline evidence, not a failure verdict by itself.
+
+### Compose validation
+
+Use a disposable Compose project directory and pass its Compose file explicitly:
+
+```bash
+docker info
+docker compose -f ./path/to/compose.yml config --quiet
+npm run build:execution
+node packages/scheduler/dist/cli.js search \
+  --platform compose \
+  --target ./path/to/compose.yml \
+  --delay-options 0,500,1000 \
+  --output compose-failure.json
+node packages/scheduler/dist/cli.js replay compose-failure.json
+```
+
+DSRD performs configuration validation and image pull/build preparation before
+the measured startup window. Measured starts use `--no-build` and `--pull never`.
+Every attempt uses a unique hashed Compose project name and cleanup is scoped to
+that project; do not run broad `docker system prune` commands.
+
+For a manually inspected target, check its declared `depends_on` conditions,
+health checks, terminal jobs, build contexts, env files, bind mounts, and
+required secrets before starting a search. Setup failures (invalid YAML,
+missing images, failed builds, unavailable daemon, port conflicts, or timeouts)
+are reported as execution/setup errors and must not be recorded as races.
+
+### Understanding terminal statuses
+
+Physical runs use these statuses:
+
+- `healthy` — readiness and workload evidence completed successfully.
+- `workload_failure` — non-zero workload exit, failed readiness, or structured
+  application failure evidence.
+- `execution_error` — Docker/runtime/observer/cleanup failure.
+- `inconclusive` — insufficient or conflicting evidence.
+- `cancelled` — explicitly aborted execution.
+
+Only a confirmed workload failure is eligible for a `failure.json` artifact.
+Inspect the artifact and timeline before claiming a race:
+
+```bash
+node -e 'const a=require("./failure.json"); console.log(JSON.stringify({target:a.target, schedule:a.minimizedSchedule, events:a.events}, null, 2))'
+```
+
+Always replay the saved artifact after discovery. If replay does not reproduce
+the expected failure and ordering evidence, treat the result as unverified.
