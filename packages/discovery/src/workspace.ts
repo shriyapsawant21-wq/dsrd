@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, readFile, readdir, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -14,6 +14,7 @@ export async function resolveRepository(input: RepositoryInput, options: { signa
     await git(["clone", "--no-checkout", "--", input.url, root], options);
     await git(["-C", root, "checkout", "--detach", input.ref, "--"], options);
     const revision = (await git(["-C", root, "rev-parse", "HEAD"], options)).trim();
+    await setTreeWritable(root, false);
     return { ownershipId: randomUUID(), root, owned: true, origin: sanitizeOrigin(input.url), resolvedRevision: revision };
   } catch (error) { await rm(root, { recursive: true, force: true }); throw error; }
 }
@@ -34,8 +35,19 @@ export async function snapshotRepository(workspace: RepositoryWorkspace, inputPa
 
 export async function disposeRepository(workspace: RepositoryWorkspace): Promise<CleanupReport> {
   if (!workspace.owned) return { removed: [], remaining: [], diagnostics: [] };
-  try { await rm(workspace.root, { recursive: true, force: true }); return { removed: [{ kind: "workspace", id: workspace.ownershipId }], remaining: [], diagnostics: [] }; }
+  try { await setTreeWritable(workspace.root, true); await rm(workspace.root, { recursive: true, force: true }); return { removed: [{ kind: "workspace", id: workspace.ownershipId }], remaining: [], diagnostics: [] }; }
   catch (error) { return { removed: [], remaining: [{ kind: "workspace", id: workspace.ownershipId }], diagnostics: [{ code: "cleanup_failed", message: error instanceof Error ? error.message : "workspace cleanup failed", path: [] }] }; }
 }
 function sanitizeOrigin(value: string): string { const url = new URL(value); url.username = ""; url.password = ""; return url.toString(); }
+async function setTreeWritable(root: string, writable: boolean): Promise<void> {
+  const entry = await lstat(root);
+  if (entry.isSymbolicLink()) return;
+  if (entry.isDirectory()) {
+    if (writable) await chmod(root, 0o755);
+    for (const child of await readdir(root)) await setTreeWritable(join(root, child), writable);
+    if (!writable) await chmod(root, 0o555);
+    return;
+  }
+  await chmod(root, writable ? 0o644 : 0o444);
+}
 function git(args: string[], options: { signal: AbortSignal; acquisitionMs: number }): Promise<string> { return new Promise((resolveResult, reject) => { const child = spawn("git", args, { stdio: ["ignore", "pipe", "pipe"] }); let output = ""; let errors = ""; child.stdout.on("data", (chunk) => { output += chunk; }); child.stderr.on("data", (chunk) => { errors += chunk; }); const timer = setTimeout(() => child.kill("SIGTERM"), options.acquisitionMs); options.signal.addEventListener("abort", () => child.kill("SIGTERM"), { once: true }); child.on("error", reject); child.on("close", (code) => { clearTimeout(timer); code === 0 ? resolveResult(output) : reject(new Error(errors || `git exited ${code}`)); }); }); }

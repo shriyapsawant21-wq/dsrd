@@ -15,7 +15,11 @@ describe("repository workspaces", () => {
     const revision = (await execFile("git", ["-C", source, "rev-parse", "HEAD"])).stdout.trim();
     const cloned = await resolveRepository({ kind: "git", url: `file://${source}`, ref: revision, submodules: false, lfs: false }, { signal: new AbortController().signal, acquisitionMs: 10_000 });
     const checkout = await resolveRepository({ kind: "checkout", path: source }, { signal: new AbortController().signal, acquisitionMs: 10_000 });
-    try { expect((await snapshotRepository(cloned, ["compose.yaml"])).contentDigest).toBe((await snapshotRepository(checkout, ["compose.yaml"])).contentDigest); expect(cloned.resolvedRevision).toBe(revision); }
+    try {
+      expect((await snapshotRepository(cloned, ["compose.yaml"])).contentDigest).toBe((await snapshotRepository(checkout, ["compose.yaml"])).contentDigest);
+      expect(cloned.resolvedRevision).toBe(revision);
+      await expect(writeFile(join(cloned.root, "compose.yaml"), "mutated")).rejects.toMatchObject({ code: "EACCES" });
+    }
     finally { expect(await disposeRepository(cloned)).toMatchObject({ remaining: [] }); }
   });
 });
