@@ -743,7 +743,7 @@ describe("DockerRuntimeController", () => {
       runTimeoutMs: 5,
     });
 
-    await expect(controller.runSchedule({ id: "prepared", perturbations: [] }, ["api"])).resolves.toMatchObject({ status: "pass" });
+    await expect(controller.runSchedule({ id: "prepared", perturbations: [] }, ["api"])).resolves.toMatchObject({ status: "healthy" });
   });
 
   it("aborts observer work before cleanup when the run times out", async () => {

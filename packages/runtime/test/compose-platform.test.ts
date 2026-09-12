@@ -172,6 +172,27 @@ describe("ComposeExecutionPlatform", () => {
     ]);
   });
 
+  it("allocates a fresh opaque attempt ID for each execution of the same schedule", async () => {
+    const executor = new RecordingExecutor();
+    const attemptIds: string[] = [];
+    const platform = new ComposeExecutionPlatform({
+      discovery: new RecordingDiscovery(),
+      executorFor: (_target, attemptId) => {
+        attemptIds.push(attemptId ?? "");
+        return executor;
+      },
+    });
+    const schedule = { id: "repeatable-schedule", perturbations: [] };
+
+    await platform.run(target, schedule);
+    await platform.run(target, schedule);
+    await platform.replay(target, schedule);
+
+    expect(attemptIds).toHaveLength(3);
+    expect(new Set(attemptIds).size).toBe(3);
+    expect(attemptIds).not.toContain(schedule.id);
+  });
+
   it("rejects readiness perturbations unless the platform exposes that capability", async () => {
     const executor = new RecordingExecutor();
     const platform = new ComposeExecutionPlatform({

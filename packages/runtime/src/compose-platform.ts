@@ -6,6 +6,7 @@ import type {
   TargetConfig,
   Workload,
 } from "@dsrd/contracts";
+import { randomUUID } from "node:crypto";
 
 import type { CommandInvocation, CommandRunner } from "./command-runner.js";
 import { DockerCommandError } from "./docker-compose-client.js";
@@ -153,7 +154,7 @@ export class ComposeExecutionPlatform implements ExecutionPlatform {
     const composeTarget = this.composeTarget(target);
     const services = await this.discover(composeTarget);
     this.validateSchedule(schedule, services);
-    return this.options.executorFor(composeTarget, schedule.id)
+    return this.options.executorFor(composeTarget, this.createAttemptId())
       .runSchedule(schedule, services.map(({ id }) => id));
   }
 
@@ -161,7 +162,7 @@ export class ComposeExecutionPlatform implements ExecutionPlatform {
     const composeTarget = this.composeTarget(target);
     const services = await this.discover(composeTarget);
     this.validateSchedule(schedule, services);
-    return this.options.executorFor(composeTarget, schedule.id)
+    return this.options.executorFor(composeTarget, this.createAttemptId())
       .replaySchedule(schedule, services.map(({ id }) => id));
   }
 
@@ -189,5 +190,9 @@ export class ComposeExecutionPlatform implements ExecutionPlatform {
       }
       seen.add(key);
     }
+  }
+
+  private createAttemptId(): string {
+    return `attempt-${randomUUID().replaceAll("-", "")}`;
   }
 }

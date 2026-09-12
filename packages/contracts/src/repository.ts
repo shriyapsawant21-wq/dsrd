@@ -30,7 +30,7 @@ export type RepositoryInput = z.infer<typeof repositoryInputSchema>;
 export const runDiagnosticSchema = z.object({
   code: identifierSchema,
   message: z.string().min(1),
-  path: z.array(z.string()).default([]),
+  path: z.array(z.string()).optional(),
 }).strict();
 
 export const targetCandidateSchema = z.object({
