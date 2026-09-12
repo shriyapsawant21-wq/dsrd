@@ -10,10 +10,16 @@ checkout or pinned Git URL → inspect → select/configure → prepare
 ## Entry points
 
 - [Implementation progress](progress.md)
-- [Onboarding architecture](docs/superpowers/specs/2026-09-12-repository-onboarding-design.md)
-- [Implementation plan](docs/superpowers/plans/2026-09-12-repository-onboarding.md)
+- [Architecture](architecture.md)
+- [Contributor guide](CONTRIBUTING.md)
+- [Scalable debugger architecture](docs/superpowers/specs/2026-09-12-scalable-debugger-architecture.md)
+- [Overall implementation plan](docs/plan.md)
 - [Shared contracts](docs/contracts/shared-contracts.md)
 - [Demo runbook](docs/runbooks/demo.md)
+- [Configuration reference](docs/configuration.md)
+- [Outcome semantics](docs/outcomes.md)
+- [Testing guide](docs/testing.md)
+- [Operational safety](docs/operations.md)
 
 ## Current capabilities
 
