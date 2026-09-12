@@ -61,3 +61,24 @@ Artifacts contain no credentials, tokens, kubeconfig contents, or secret environ
 ## Migration Rule
 
 Review every scheduler, runtime, proof, API, and UI consumer of a public-contract change before merging it. Do not restore local copies of `Schedule`, `RunResult`, `TimelineEvent`, or `FailureArtifact`.
+
+## Repository Onboarding Contracts
+
+`@dsrd/contracts` is the sole owner of the Zod schemas for repository inputs,
+inspection results, `dsrd.yaml` configuration, experiment policy, and portable
+evidence. A repository input is either a checkout path or a pinned Git URL/ref;
+Git URLs with embedded credentials are rejected. Configuration parsing is strict:
+it rejects unknown dependency IDs, invalid relative paths, missing Compose launch
+files, invalid deadlines/counts, and local long-running workloads without a
+readiness assertion.
+
+`FailureArtifact` is now a v2/v3 union. Version 2 keeps the exact legacy replay
+shape and remains explicitly unverified. Version 3 adds source/config/model and
+environment digests, public binding requirements, failure signature, ordering
+constraints, and confirmation evidence. It is the only format eligible for the
+verified replay guarantees introduced by onboarding.
+
+`TimelineEvent` may carry a captured `eventId` and monotonic `sequence`; `RunResult`
+may carry a stable failure signature, applied perturbations, and exact cleanup
+report. These are optional extensions so existing v2 producers and consumers keep
+working while new adapters provide stronger evidence.
