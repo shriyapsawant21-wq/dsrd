@@ -134,6 +134,12 @@ describe("C3 workload proof evidence", () => {
     expect(evaluateWorkloadRun(snapshot)).toMatchObject({
       status: "workload_failure",
       failureReason: "sqlite-migrate exited with code 7",
+      failureSignature: {
+        workloadId: "sqlite-migrate",
+        assertionId: "process-exit",
+        category: "unexpected_exit",
+        code: "7",
+      },
     });
   });
 
