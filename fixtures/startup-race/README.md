@@ -61,15 +61,15 @@ The non-zero API exit is the primary machine-verifiable failure signal. The stru
 
 ## Replay schedule
 
-`schedules/postgres-startup-race.json` is the four-service example schedule passed across the shared `Schedule` boundary. Riya's runtime owns applying its timing fields and executing the services. The proof layer only observes that execution and returns `RunResult`.
+`schedules/postgres-startup-race.json` is the four-service example schedule passed across the shared `Schedule` boundary. The runtime applies its timing fields and executes the services. The proof layer observes that execution and returns `RunResult`.
 
-For this schedule to expose the race, the runtime must start scheduled services without allowing Compose to auto-start health-gated dependencies. The current `DockerComposeClient.startService` does not yet provide that mode. The runtime must also supply a terminal state/log snapshot after the worker finishes; its current pre-observation snapshot can be stale while proof probes are running. Both changes belong to Riya's runtime boundary and are intentionally not implemented here.
+For this schedule to expose the race, the runtime must start scheduled services without allowing Compose to auto-start health-gated dependencies. The current `DockerComposeClient.startService` does not yet provide that mode. The runtime must also supply a terminal state/log snapshot after the worker finishes; its current pre-observation snapshot can be stale while proof probes are running. Both changes belong to the runtime boundary and are intentionally not implemented here.
 
 Copy `.env.example` values or override host ports if either port is occupied.
 
 ## Structured fixture events
 
-The services emit one-line JSON events that Riya's runtime can timestamp and provide to the proof package:
+The services emit one-line JSON events that the runtime can timestamp and provide to the proof package:
 
 - `postgres/startup_delay_applied`
 - `api/db_connection_attempted`
@@ -81,6 +81,6 @@ The services emit one-line JSON events that Riya's runtime can timestamp and pro
 - `worker/work_succeeded`
 - `worker/api_request_failed`
 
-## Ownership boundary
+## Component boundary
 
-The PowerShell files are fixture verification helpers, not the reusable Docker runtime. Riya's runtime owns reset, controlled service startup, schedule delay injection, logs, and replay execution. Akil owns search and minimization. The proof package owns readiness observations, deterministic classification, and timeline construction.
+The PowerShell files are fixture verification helpers, not the reusable Docker runtime. Runtime provides reset, controlled service startup, schedule delay injection, logs, and replay execution. Scheduler provides search and minimization. Proof provides readiness observations, deterministic classification, and timeline construction. Any contributor may work on any of these components.

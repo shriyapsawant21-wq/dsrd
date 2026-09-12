@@ -36,7 +36,7 @@ describe("minimizeSchedule", () => {
 function resultFor(schedule: Schedule, fails: boolean): RunResult {
   return {
     scheduleId: schedule.id,
-    status: fails ? "fail" : "pass",
+    status: fails ? "workload_failure" : "healthy",
     events: [],
     logs: []
   };

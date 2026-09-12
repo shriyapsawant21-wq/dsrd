@@ -2,6 +2,7 @@ import type {
   ExecutionPlatform,
   FailureArtifact,
   Perturbation,
+  RunResult,
   Schedule,
   TargetConfig,
   Workload,
@@ -29,6 +30,16 @@ type PlatformDiscoversWorkloads = ExecutionPlatform extends {
   ? true
   : false;
 
+type RunUsesPhysicalOutcomes = RunResult["status"] extends
+  | "healthy"
+  | "workload_failure"
+  | "execution_error"
+  | "inconclusive"
+  | "cancelled"
+  ? true
+  : false;
+
 type _GenericScheduleHasPerturbations = Assert<GenericScheduleHasPerturbations>;
 type _GenericArtifactHasTarget = Assert<GenericArtifactHasTarget>;
 type _PlatformDiscoversWorkloads = Assert<PlatformDiscoversWorkloads>;
+type _RunUsesPhysicalOutcomes = Assert<RunUsesPhysicalOutcomes>;

@@ -6,6 +6,23 @@ import { discoverFailure, replayFailure } from "./orchestrator.js";
 describe("orchestration", () => {
   const target: TargetConfig = { platform: "local-process", manifestPath: "race.json" };
 
+  it("rejects an unhealthy empty-schedule baseline without publishing an artifact", async () => {
+    const result = await discoverFailure({
+      candidates: [{ id: "candidate", perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }] }],
+      delayOptionsMs: [0, 1000],
+      target,
+      runSchedule: async (_target, schedule) => ({
+        scheduleId: schedule.id,
+        status: "workload_failure",
+        failureReason: "target is already broken",
+        events: [],
+        logs: [],
+      }),
+    });
+
+    expect(result).toEqual({ status: "target_unhealthy", testedSchedules: 1 });
+  });
+
   it("searches, minimizes, and produces a target-bearing artifact from runner evidence", async () => {
     const original: Schedule = {
       id: "schedule-001",
@@ -25,7 +42,7 @@ describe("orchestration", () => {
 
     expect(result).toEqual({
       status: "found_failure",
-      testedSchedules: 2,
+      testedSchedules: 10,
       artifact: {
         version: 2,
         createdAt: "2026-08-29T00:00:00.000Z",
@@ -49,7 +66,7 @@ describe("orchestration", () => {
     let lowerDelayRuns = 0;
     const resultFor = (schedule: Schedule, fails: boolean): RunResult => ({
       scheduleId: schedule.id,
-      status: fails ? "fail" : "pass",
+      status: fails ? "workload_failure" : "healthy",
       events: [],
       logs: []
     });
@@ -95,7 +112,7 @@ describe("orchestration", () => {
 
     await expect(replayFailure(artifact, replay)).resolves.toMatchObject({
       status: "reproduced",
-      result: { status: "fail" }
+      result: { status: "workload_failure" }
     });
   });
 
@@ -135,7 +152,7 @@ describe("orchestration", () => {
     await expect(
       replayFailure(artifact, async (_target, schedule) => ({
         scheduleId: schedule.id,
-        status: "fail",
+        status: "workload_failure",
         failureReason: "bootstrap unavailable",
         events: [{ timeMs: 725, service: "api", event: "different_failure" }],
         logs: []
@@ -162,7 +179,7 @@ describe("orchestration", () => {
     await expect(
       replayFailure(artifact, async (_target, schedule) => ({
         scheduleId: schedule.id,
-        status: "fail",
+        status: "workload_failure",
         failureReason: "bootstrap unavailable",
         events: [{
           timeMs: 725,
@@ -182,7 +199,7 @@ function fakeRun(schedule: Schedule): RunResult {
   )?.delayMs ?? 0) >= 500;
   return {
     scheduleId: schedule.id,
-    status: fails ? "fail" : "pass",
+    status: fails ? "workload_failure" : "healthy",
     events: fails ? [{ timeMs: 500, service: "api", event: "startup_failed" }] : [],
     logs: [],
     ...(fails ? { failureReason: "bootstrap unavailable" } : {})

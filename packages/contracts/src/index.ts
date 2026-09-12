@@ -1,7 +1,14 @@
+export type DependencyEdge = {
+  workloadId: string;
+  condition: "service_started" | "service_healthy" | "service_completed_successfully";
+  provenance: "declared" | "configured";
+};
+
 export type Workload = {
   id: string;
   kind: "service" | "process" | "job" | "initializer";
   dependsOn?: string[];
+  dependencyEdges?: DependencyEdge[];
   perturbablePhases: Array<"start" | "ready">;
   readiness?: {
     type: "http" | "tcp" | "process" | "custom";
@@ -32,12 +39,25 @@ export type TimelineEvent = {
   detail?: string;
 };
 
+export type PhysicalRunStatus =
+  | "healthy"
+  | "workload_failure"
+  | "execution_error"
+  | "inconclusive"
+  | "cancelled";
+
+export type RunDiagnostic = {
+  code: string;
+  message: string;
+};
+
 export type RunResult = {
   scheduleId: string;
-  status: "pass" | "fail";
+  status: PhysicalRunStatus;
   events: TimelineEvent[];
   logs: string[];
   failureReason?: string;
+  diagnostics?: RunDiagnostic[];
 };
 
 export interface ExecutionPlatform {

@@ -11,9 +11,13 @@ describe("runtime replay", () => {
   it("executes the provided schedule through the ordinary runtime path", async () => {
     const starts: string[] = [];
     const compose: ComposeRuntime = {
+      prepare: async () => undefined,
       resetStack: async () => undefined,
       startService: async (service) => {
         starts.push(service);
+      },
+      startServices: async (services) => {
+        starts.push(...services);
       },
       collectLogs: async () => ["api | failed"],
       listServices: async () => [{ service: "api", state: "exited", exitCode: 1 }],
@@ -25,7 +29,7 @@ describe("runtime replay", () => {
       observer: {
         evaluate: async (snapshot: ObservationSnapshot): Promise<RunResult> => ({
           scheduleId: snapshot.scheduleId,
-          status: "fail",
+          status: "workload_failure",
           failureReason: "oracle-owned failure",
           events: [],
           logs: snapshot.logs
@@ -41,7 +45,7 @@ describe("runtime replay", () => {
     expect(starts).toEqual(["postgres", "api"]);
     expect(result).toEqual({
       scheduleId: "saved-failure",
-      status: "fail",
+      status: "workload_failure",
       failureReason: "oracle-owned failure",
       events: [],
       logs: ["api | failed"]

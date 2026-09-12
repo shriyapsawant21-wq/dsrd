@@ -51,7 +51,7 @@ export async function searchCandidateStages(
       seen.add(key);
       const result = await runSchedule(target, schedule);
       testedSchedules += 1;
-      if (result.status === "fail") {
+      if (result.status === "workload_failure") {
         return {
           status: "found_failure",
           testedSchedules,

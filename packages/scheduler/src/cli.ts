@@ -101,8 +101,8 @@ export async function runCli(
         const verificationLabel = failureFound ? "  (minimization/replay verification)" : "";
         dependencies.log(`RUN ${runNumber.toString().padStart(2, "0")}${verificationLabel}  ${describeSchedule(schedule)}`);
         const runResult = await runSchedule(runTarget, schedule);
-        if (runResult.status === "fail") failureFound = true;
-        dependencies.log(runResult.status === "pass" ? "PASS" : "FAIL — race detected");
+        if (runResult.status === "workload_failure") failureFound = true;
+        dependencies.log(runResult.status === "healthy" ? "PASS" : "FAIL — race detected");
         dependencies.log("");
         return runResult;
       };
@@ -119,7 +119,7 @@ export async function runCli(
         maxSchedules: maxRuns,
       });
 
-      if (result.status === "no_failure") {
+      if (result.status !== "found_failure") {
         dependencies.log(
           renderResultSummary({ status: "no-failure", testedSchedules: result.testedSchedules })
         );

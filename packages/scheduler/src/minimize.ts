@@ -48,5 +48,5 @@ async function fails(
   target: TargetConfig,
   runSchedule: RunSchedule
 ): Promise<boolean> {
-  return (await runSchedule(target, schedule)).status === "fail";
+  return (await runSchedule(target, schedule)).status === "workload_failure";
 }

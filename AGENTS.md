@@ -37,58 +37,31 @@ The discover -> minimize -> replay architecture is fixed for the hackathon MVP.
 Read these before implementation:
 - `docs/plan.md` — overall architecture and team integration
 - `docs/contracts/shared-contracts.md` — cross-team interfaces
-- `docs/plans/akil.md` — Akil ownership
-- `docs/plans/riya.md` — Riya ownership
-- `docs/plans/shriya.md` — Shriya ownership
+- `docs/plans/akil.md` — schedule exploration component plan
+- `docs/plans/riya.md` — Docker runtime component plan
+- `docs/plans/shriya.md` — proof-layer component plan
 - `docs/integration.md` — merge and integration checkpoints
 - `docs/runbooks/demo.md` — golden demo definition
 
-## Team Ownership
+## Package Boundaries
 
-### Akil — Schedule Exploration Engine
-Owns:
-- schedule representation and candidate generation
-- search loop
-- minimization
-- failure artifact serialization
-- CLI orchestration
+Any contributor may work anywhere in the repository. Keep changes coherent with
+these component boundaries, but do not treat them as exclusive ownership:
 
-Does not own:
-- Docker lifecycle implementation
-- readiness/failure oracle implementation
-
-### Riya — Docker Runtime
-Owns:
-- Compose project control
-- clean reset between experiments
-- controlled service startup
-- delay injection
-- physical replay execution
-- Docker logs/metadata collection
-
-Does not own:
-- search strategy
-- pass/fail semantics
-
-### Shriya — Proof Layer
-Owns:
-- intentionally vulnerable demo stack
-- HTTP/TCP readiness probes
-- deterministic pass/fail oracle
-- timeline events
-- demo reliability
-
-Does not own:
-- schedule search
-- Docker orchestration policy
+- Scheduler: schedule representation, candidate generation, search,
+  minimization, artifacts, and CLI orchestration.
+- Runtime: platform lifecycle, preflight, controlled startup, delay injection,
+  replay execution, and runtime metadata collection.
+- Proof: fixture behavior, readiness probes, deterministic oracle, and timeline
+  evidence.
 
 ## Replay Boundary
 
 ```text
-Akil CLI reads failure.json
-  -> Riya executes minimized Schedule
-  -> Shriya evaluates the run
-  -> Akil reports replay success/failure
+CLI reads failure.json
+  -> runtime executes minimized Schedule
+  -> proof evaluates the run
+  -> CLI reports replay success/failure
 ```
 
 No duplicate replay implementation across packages.
@@ -96,7 +69,7 @@ No duplicate replay implementation across packages.
 ## Shared Contracts
 All packages must import shared types from the contracts package. Do not create local incompatible copies of `Schedule`, `TimelineEvent`, `RunResult`, or `FailureArtifact`.
 
-Contract changes require checking all three owners before merge.
+Contract changes require checking every package consumer before merge.
 
 ## Definition of Done
 A race is only considered discovered when:
@@ -118,11 +91,49 @@ If replay fails to reproduce the failure, the feature is not done.
 - Prefer the smallest working primitive over a sophisticated abstraction.
 - Do not add auth, billing, cloud deployment, accounts, or unrelated platform work before the core debugger works.
 
+## Reliability and Evidence Rules
+- A Docker image pull, image build, missing environment file, invalid Compose file,
+  port conflict, command failure, timeout, or cleanup failure is an execution/setup
+  error, not a race failure.
+- Preflight Compose targets before measuring a schedule. Image acquisition and build
+  time must not consume the experiment's startup/readiness timeout.
+- A baseline must be demonstrably healthy before exploration begins. If it is not,
+  return an explicit `target_unhealthy`, `execution_error`, or `inconclusive` result;
+  do not save a race artifact.
+- Confirm both a normal baseline and a candidate failure across configurable repeated
+  runs. Alternating outcomes are flaky/inconclusive until the configured threshold
+  is met.
+- Strong evidence is required for a race: non-zero terminal exit, failed health or
+  readiness probe, explicit structured application failure event, or an expected
+  terminal job failure. Generic log strings such as `timeout` or `ECONNREFUSED` are
+  diagnostic timeline evidence only and must never be the sole failure oracle.
+- A replay succeeds only when the same minimized schedule reproduces the expected
+  failure category and meaningful ordering evidence through the same runtime and
+  oracle path used for discovery.
+- Make run, readiness, and preflight timeouts configurable. Never silently map a
+  timeout to pass, no-failure, or discovered-race status.
+
+## External Target Rules
+- Treat third-party Compose repositories as untrusted test inputs. Do not modify
+  their tracked source to make a race appear; use only documented local setup files
+  and report setup failures separately.
+- Inspect a target's setup requirements, health checks, terminal jobs, and readiness
+  signals before claiming it is suitable for DSRD.
+- Always clean only the exact target Compose project after an experiment. Report
+  containers, networks, and volumes removed; never run broad Docker cleanup commands.
+
+## Test Isolation
+- Vitest and other test runners must exclude `.worktrees/`, nested clones,
+  `node_modules/`, build output, and other non-primary checkouts. Test counts must
+  describe this checkout only.
+- The golden Compose demo is complete only after fresh preflight, baseline,
+  discovery, minimization, artifact creation, and replay verification all pass.
+
 ## Codex / Superpowers Workflow
 Before implementation:
 1. read this file
 2. read `docs/plan.md`
-3. read the assigned owner's plan
+3. read the relevant component plans
 4. use Superpowers planning before coding
 
 For independent tasks, subagents may be used, but they must not redesign cross-team interfaces.

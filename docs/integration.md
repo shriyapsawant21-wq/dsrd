@@ -1,12 +1,8 @@
 # Team Integration Plan
 
 ## Branches
-Recommended human branches:
-- `feat/scheduler` — Akil
-- `feat/runtime` — Riya
-- `feat/observability` — Shriya
-
-Use smaller sub-branches if needed, but keep ownership clear.
+Use small, purpose-named branches when isolation is useful. Any contributor may
+work on any package; keep package boundaries and public contracts clear.
 
 ## Integration Order
 
@@ -19,22 +15,22 @@ Merge first:
 Nobody invents local duplicate contracts after this.
 
 ### Gate 1 — Mock integration
-Akil's search engine must run against a fake `runSchedule` implementation before Docker integration.
+The search engine must run against a fake `runSchedule` implementation before Docker integration.
 
-Riya's runtime must run a manually supplied `Schedule` before search integration.
+The runtime must run a manually supplied `Schedule` before search integration.
 
-Shriya's oracle must classify a manually executed fixture run before search integration.
+The oracle must classify a manually executed fixture run before search integration.
 
 ### Gate 2 — First real run
 Connect:
 ```text
-Schedule -> Riya runtime -> Shriya oracle -> RunResult
+Schedule -> runtime -> proof oracle -> RunResult
 ```
 
 Do not add minimization before one deterministic end-to-end run works.
 
 ### Gate 3 — Search
-Connect Akil's candidate loop to the real runner.
+Connect the candidate loop to the real runner.
 
 Success:
 ```text
@@ -60,7 +56,7 @@ UI consumes output JSON. It must not become a dependency of the debugger engine.
 - Prefer small PRs that establish an interface or one vertical capability.
 - Avoid simultaneous edits to the same shared file.
 - Contract changes go in separate commits/PRs when practical.
-- Do not resolve a merge conflict by silently changing another owner's interface.
+- Do not resolve a merge conflict by silently changing a public interface.
 
 ## Daily Sync Questions
 Each teammate should answer:

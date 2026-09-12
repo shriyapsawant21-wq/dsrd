@@ -17,7 +17,7 @@ describe("searchSchedules", () => {
     const result = await searchSchedules(schedules, target, async (runTarget, schedule) => {
       expect(runTarget).toEqual(target);
       executed.push(schedule.id);
-      return runResult(schedule.id, schedule.id === "schedule-001" ? "fail" : "pass");
+      return runResult(schedule.id, schedule.id === "schedule-001" ? "workload_failure" : "healthy");
     });
 
     expect(executed).toEqual(["schedule-000", "schedule-001"]);
@@ -31,7 +31,7 @@ describe("searchSchedules", () => {
 
   it("reports no failure after exhausting candidates", async () => {
     const result = await searchSchedules(schedules, target, async (_target, schedule) =>
-      runResult(schedule.id, "pass")
+      runResult(schedule.id, "healthy")
     );
 
     expect(result).toEqual({ status: "no_failure", testedSchedules: 3 });
@@ -50,7 +50,7 @@ describe("searchCandidateStages", () => {
 
     const result = await searchCandidateStages(stages, target, async (_target, schedule) => {
       executed.push(schedule.id);
-      return runResult(schedule.id, schedule.id === "pair" ? "fail" : "pass");
+      return runResult(schedule.id, schedule.id === "pair" ? "workload_failure" : "healthy");
     });
 
     expect(executed).toEqual(["baseline", "pair"]);
@@ -66,7 +66,7 @@ describe("searchCandidateStages", () => {
       { name: "full", candidateCount: 0, create: () => [] },
     ], target, async (_target, schedule) => {
       executed.push(schedule.id);
-      return runResult(schedule.id, "pass");
+      return runResult(schedule.id, "healthy");
     }, { maxSchedules: 2 });
 
     expect(executed).toEqual(["schedule-000", "schedule-001"]);
@@ -80,6 +80,6 @@ function runResult(scheduleId: string, status: RunResult["status"]): RunResult {
     status,
     events: [],
     logs: [],
-    ...(status === "fail" ? { failureReason: "bootstrap unavailable" } : {})
+    ...(status === "workload_failure" ? { failureReason: "bootstrap unavailable" } : {})
   };
 }

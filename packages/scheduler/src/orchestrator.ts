@@ -19,6 +19,8 @@ export type DiscoverFailureOptions = {
   createdAt?: string;
   runSchedule: RunSchedule;
   maxSchedules?: number;
+  baselineRuns?: number;
+  confirmationRuns?: number;
 };
 
 export type DiscoveryResult =
@@ -30,6 +32,11 @@ export type DiscoveryResult =
   | {
       status: "no_failure";
       testedSchedules: number;
+    }
+  | {
+      status: "target_unhealthy" | "execution_error" | "inconclusive";
+      testedSchedules: number;
+      diagnostics?: RunResult["diagnostics"];
     };
 
 export type ReplayResult = {
@@ -48,17 +55,62 @@ export async function discoverFailure(
     executions += 1;
     return options.runSchedule(target, schedule);
   };
+  const baseline: Schedule = { id: "baseline", perturbations: [] };
+  const baselineRuns = options.baselineRuns ?? 1;
+  const confirmationRuns = options.confirmationRuns ?? 2;
+  if (!Number.isInteger(baselineRuns) || baselineRuns < 1) {
+    throw new RangeError("baselineRuns must be a positive integer");
+  }
+  if (!Number.isInteger(confirmationRuns) || confirmationRuns < 1) {
+    throw new RangeError("confirmationRuns must be a positive integer");
+  }
+  let baselineResult: RunResult | undefined;
+  for (let run = 0; run < baselineRuns; run += 1) {
+    baselineResult = await runSchedule(options.target, baseline);
+    if (baselineResult.status !== "healthy") break;
+  }
+  const baselineEvidence = baselineResult ?? {
+    scheduleId: baseline.id,
+    status: "inconclusive" as const,
+    events: [],
+    logs: [],
+  };
+  if (baselineEvidence.status !== "healthy") {
+    return {
+      status: baselineEvidence.status === "workload_failure"
+        ? "target_unhealthy"
+        : baselineEvidence.status === "execution_error"
+          ? "execution_error"
+          : "inconclusive",
+      testedSchedules: executions,
+      ...(baselineEvidence.diagnostics === undefined ? {} : { diagnostics: baselineEvidence.diagnostics }),
+    };
+  }
   const searchOptions: SearchOptions = { maxSchedules: options.maxSchedules };
   const searchResult = options.candidateStages !== undefined
     ? await searchCandidateStages(options.candidateStages, options.target, runSchedule, searchOptions)
-    : await searchSchedules(options.candidates ?? [], options.target, runSchedule, searchOptions);
+    : await searchSchedules(
+      (options.candidates ?? []).filter((candidate) => candidate.perturbations.length > 0),
+      options.target,
+      runSchedule,
+      searchOptions,
+    );
   if (searchResult.status === "no_failure") {
-    return searchResult;
+    return { ...searchResult, testedSchedules: executions };
   }
+
+  const confirmation = await confirmFailure(
+    options.target,
+    searchResult.failingSchedule,
+    searchResult.failureReason,
+    confirmationRuns - 1,
+    runSchedule,
+  );
+  if (!confirmation) return { status: "inconclusive", testedSchedules: executions };
 
   const runReproducibly: RunSchedule = async (target, schedule) => {
     const first = await runSchedule(target, schedule);
-    if (first.status !== "fail") return first;
+    if (first.status !== "workload_failure") return first;
     return runSchedule(target, schedule);
   };
   const minimizedSchedule = await minimizeSchedule(
@@ -68,13 +120,13 @@ export async function discoverFailure(
     options.delayOptionsMs
   );
   const minimizedRun = await runReproducibly(options.target, minimizedSchedule);
-  if (minimizedRun.status !== "fail") {
-    return { status: "no_failure", testedSchedules: searchResult.testedSchedules };
+  if (minimizedRun.status !== "workload_failure") {
+    return { status: "inconclusive", testedSchedules: executions };
   }
 
   return {
     status: "found_failure",
-    testedSchedules: searchResult.testedSchedules,
+    testedSchedules: executions,
     artifact: createFailureArtifact({
       createdAt: options.createdAt ?? new Date().toISOString(),
       target: options.target,
@@ -84,6 +136,20 @@ export async function discoverFailure(
       events: minimizedRun.events
     })
   };
+}
+
+async function confirmFailure(
+  target: TargetConfig,
+  schedule: Schedule,
+  expectedReason: string | undefined,
+  repeats: number,
+  runSchedule: RunSchedule,
+): Promise<boolean> {
+  for (let run = 0; run < repeats; run += 1) {
+    const result = await runSchedule(target, schedule);
+    if (result.status !== "workload_failure" || result.failureReason !== expectedReason) return false;
+  }
+  return true;
 }
 
 export async function replayFailure(
@@ -100,7 +166,7 @@ export async function replayFailure(
 
   return {
     status:
-      result.status === "fail" && reasonMatches && evidenceMatches
+      result.status === "workload_failure" && reasonMatches && evidenceMatches
         ? "reproduced"
         : "not_reproduced",
     result

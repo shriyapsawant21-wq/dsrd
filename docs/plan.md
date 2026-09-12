@@ -3,6 +3,11 @@
 ## Objective
 Build a local Docker Compose debugger that actively explores startup timing, discovers hidden race conditions, minimizes the timing needed to reproduce them, and emits a deterministic replay artifact plus timeline.
 
+For the proposed evolution to cloned-project portability and isolated execution
+capacity, see [Portable and Scalable DSRD Architecture](superpowers/specs/2026-09-12-scalable-debugger-architecture.md).
+It preserves this MVP pipeline and defines staged migration gates; proposed
+contracts and deployment capabilities are not yet implemented.
+
 ## Problem
 A container being started does not mean the process inside it is ready. Services often encode hidden timing assumptions: an API assumes Postgres is listening, a worker assumes the API is healthy, or migrations assume another dependency has completed. These failures are intermittent because startup timing changes across runs.
 
@@ -50,13 +55,16 @@ Runtime Controller -> Event Collector -> Oracle |
               Timeline / UI
 ```
 
-## Team Division
+## Component Boundaries
 
-| Owner | Area | Main output |
-|---|---|---|
-| Akil | Schedule exploration | candidate schedules, minimization, failure artifact, CLI |
-| Riya | Docker runtime | `runSchedule(schedule)` and replay execution |
-| Shriya | Proof layer | demo fixture, oracle, `TimelineEvent[]`, reliable `RunResult` |
+Any contributor may work on any component. Keep the following boundaries clear
+so the pipeline remains testable and integrable:
+
+| Component | Main output |
+|---|---|
+| Schedule exploration | candidate schedules, minimization, failure artifact, CLI |
+| Docker runtime | `runSchedule(schedule)` and replay execution |
+| Proof layer | demo fixture, oracle, `TimelineEvent[]`, reliable `RunResult` |
 
 ## Technology
 - Node.js + TypeScript
@@ -138,33 +146,33 @@ race-debugger replay failure.json
 Shared:
 - commit contracts and interfaces first
 
-Akil:
+Schedule exploration:
 - schedule schemas
 - candidate generation
 - search loop against mock runtime
 
-Riya:
+Docker runtime:
 - Docker runner
 - stop/reset
 - service startup delays
 
-Shriya:
+Proof layer:
 - demo Compose stack
 - intentional race
 - basic readiness probes
 
 ## Day 2
-Akil:
+Schedule exploration:
 - connect search to real `runSchedule`
 - first failing candidate
 - minimization
 
-Riya:
+Docker runtime:
 - reliable reset between runs
 - logs/metadata
 - execution from provided schedule
 
-Shriya:
+Proof layer:
 - deterministic oracle
 - timeline events
 - tune fixture reliability

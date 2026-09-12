@@ -20,7 +20,7 @@ function fakeRun(schedule: Schedule): RunResult {
 
   return {
     scheduleId: schedule.id,
-    status: failed ? "fail" : "pass",
+    status: failed ? "workload_failure" : "healthy",
     events: failed
       ? [{ timeMs: delayMs, service: "api", event: "startup_failed", detail: "fake platform: bootstrap was not ready" }]
       : [],

@@ -87,5 +87,5 @@ class RecordingPlatform implements ExecutionPlatform {
 }
 
 function result(scheduleId: string): RunResult {
-  return { scheduleId, status: "pass", events: [], logs: [] };
+  return { scheduleId, status: "healthy", events: [], logs: [] };
 }

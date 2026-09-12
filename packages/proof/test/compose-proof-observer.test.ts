@@ -26,7 +26,7 @@ describe("ComposeProofObserver", () => {
 
     expect(result).toMatchObject({
       scheduleId: "delay-postgres",
-      status: "fail",
+      status: "workload_failure",
       failureReason: "PostgreSQL connection was refused (api)",
     });
     expect(result.events).toEqual(expect.arrayContaining([
