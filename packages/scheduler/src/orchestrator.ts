@@ -1,12 +1,13 @@
 import type {
   FailureArtifact,
+  FailureArtifactV3,
   RunResult,
   Schedule,
   TargetConfig,
   TimelineEvent
 } from "@dsrd/contracts";
 
-import { createFailureArtifact } from "./artifact.js";
+import { createFailureArtifact, createVerifiedFailureArtifact } from "./artifact.js";
 import type { CandidateStage } from "./candidates.js";
 import { minimizeSchedule } from "./minimize.js";
 import { searchCandidateStages, searchSchedules, type RunSchedule, type SearchOptions } from "./search.js";
@@ -22,6 +23,7 @@ export type DiscoverFailureOptions = {
   maxSchedules?: number;
   baselineRuns?: number;
   confirmationRuns?: number;
+  artifactV3?: Omit<FailureArtifactV3, "version" | "createdAt" | "target" | "originalSchedule" | "minimizedSchedule" | "expectedFailureReason" | "events">;
 };
 
 export type DiscoveryResult =
@@ -131,14 +133,27 @@ export async function discoverFailure(
     return { status: "inconclusive", testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
   }
 
-  const artifact = createFailureArtifact({
-    createdAt: options.createdAt ?? new Date().toISOString(),
-    target: options.target,
-    originalSchedule: searchResult.failingSchedule,
-    minimizedSchedule,
-    expectedFailureReason: minimizedRun.failureReason,
-    events: minimizedRun.events,
-  });
+  if (options.artifactV3 !== undefined && options.replaySchedule === undefined) {
+    return { status: "inconclusive", testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
+  }
+  const artifact: FailureArtifact = options.artifactV3 === undefined
+    ? createFailureArtifact({
+      createdAt: options.createdAt ?? new Date().toISOString(),
+      target: options.target,
+      originalSchedule: searchResult.failingSchedule,
+      minimizedSchedule,
+      expectedFailureReason: minimizedRun.failureReason,
+      events: minimizedRun.events,
+    })
+    : createVerifiedFailureArtifact({
+      ...options.artifactV3,
+      createdAt: options.createdAt ?? new Date().toISOString(),
+      target: options.target,
+      originalSchedule: searchResult.failingSchedule,
+      minimizedSchedule,
+      expectedFailureReason: minimizedRun.failureReason,
+      events: minimizedRun.events,
+    });
   if (options.replaySchedule !== undefined) {
     const replay = await replayFailure(artifact, options.replaySchedule);
     if (replay.status !== "reproduced") {

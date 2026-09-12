@@ -116,6 +116,43 @@ describe("orchestration", () => {
     expect(result).not.toHaveProperty("artifact");
   });
 
+  it("publishes a validated v3 artifact only after independent replay", async () => {
+    const result = await discoverFailure({
+      candidates: [{ id: "failing", perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }] }],
+      delayOptionsMs: [0, 1000],
+      target,
+      baselineRuns: 1,
+      confirmationRuns: 1,
+      runSchedule: async (_target, schedule) => ({
+        ...fakeRun(schedule),
+        ...(schedule.perturbations.length === 0 ? {} : {
+          failureSignature: { workloadId: "api", assertionId: "startup", category: "structured_failure" as const },
+        }),
+      }),
+      replaySchedule: async (_target, schedule) => ({
+        ...fakeRun(schedule),
+        failureSignature: { workloadId: "api", assertionId: "startup", category: "structured_failure" as const },
+      }),
+      artifactV3: {
+        repository: { snapshotId: "snapshot-1", contentDigest: "digest-1" },
+        selectedTarget: { id: "local", adapter: "local-process", root: "/workspace", launchFiles: ["manifest.json"], requirements: [], evidence: [] },
+        configDigest: "config-1",
+        modelDigest: "model-1",
+        environmentDigest: "environment-1",
+        requiredBindings: [],
+        policy: { baselineRuns: 1 },
+        signature: { workloadId: "api", assertionId: "startup", category: "structured_failure" },
+        orderingConstraints: [{
+          before: { workloadId: "api", event: "startup_failed", occurrence: 0 },
+          after: { workloadId: "api", event: "startup_failed", occurrence: 0 },
+        }],
+        verification: { baselineRuns: 1, confirmationRuns: 1, replayRuns: 1 },
+      },
+    });
+
+    expect(result).toMatchObject({ status: "found_failure", artifact: { version: 3, signature: { assertionId: "startup" } } });
+  });
+
   it("searches, minimizes, and produces a target-bearing artifact from runner evidence", async () => {
     const original: Schedule = {
       id: "schedule-001",
