@@ -78,6 +78,18 @@ describe("LocalProcessExecutionPlatform", () => {
     });
   });
 
+  it("resets owned fixture state after a completed attempt", async () => {
+    const platform = new LocalProcessExecutionPlatform({ observer });
+    const stateFile = fileURLToPath(
+      new URL("../../../fixtures/local-startup-race/state/bootstrap-ready", import.meta.url),
+    );
+
+    await expect(platform.run(target, { id: "post-attempt-reset", perturbations: [] })).resolves.toMatchObject({
+      status: "healthy",
+    });
+    await expect(readFile(stateFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("terminates a workload's child process before releasing the attempt", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-local-cleanup-"));
     const pidFile = join(directory, "child.pid");

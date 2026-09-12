@@ -80,11 +80,12 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
         }],
       };
     }
+    let result: RunResult;
     try {
       await this.reset(target);
-      return await this.execute(manifest, schedule);
+      result = await this.execute(manifest, schedule);
     } catch (error) {
-      return {
+      result = {
         scheduleId: schedule.id,
         status: "execution_error",
         events: [],
@@ -96,7 +97,24 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
       };
     } finally {
       await this.stopChildren();
+      if (manifest.resetCommand !== undefined) {
+        try {
+          await this.runResetCommand(manifest);
+        } catch (error) {
+          result = {
+            scheduleId: schedule.id,
+            status: "execution_error",
+            events: [],
+            logs: [],
+            diagnostics: [{
+              code: "local_process_execution_error",
+              message: error instanceof Error ? error.message : "Local-process cleanup failed",
+            }],
+          };
+        }
+      }
     }
+    return result;
   }
 
   async replay(target: TargetConfig, schedule: Schedule): Promise<RunResult> {
