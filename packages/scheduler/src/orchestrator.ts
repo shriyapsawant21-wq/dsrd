@@ -18,6 +18,7 @@ export type DiscoverFailureOptions = {
   target: TargetConfig;
   createdAt?: string;
   runSchedule: RunSchedule;
+  replaySchedule?: RunSchedule;
   maxSchedules?: number;
   baselineRuns?: number;
   confirmationRuns?: number;
@@ -134,18 +135,26 @@ export async function discoverFailure(
     return { status: "inconclusive", testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
   }
 
+  const artifact = createFailureArtifact({
+    createdAt: options.createdAt ?? new Date().toISOString(),
+    target: options.target,
+    originalSchedule: searchResult.failingSchedule,
+    minimizedSchedule,
+    expectedFailureReason: minimizedRun.failureReason,
+    events: minimizedRun.events,
+  });
+  if (options.replaySchedule !== undefined) {
+    const replay = await replayFailure(artifact, options.replaySchedule);
+    if (replay.status !== "reproduced") {
+      return { status: "inconclusive", testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
+    }
+  }
+
   return {
     status: "found_failure",
     testedSchedules: executions,
     exploredCandidateSchedules: searchResult.testedSchedules,
-    artifact: createFailureArtifact({
-      createdAt: options.createdAt ?? new Date().toISOString(),
-      target: options.target,
-      originalSchedule: searchResult.failingSchedule,
-      minimizedSchedule,
-      expectedFailureReason: minimizedRun.failureReason,
-      events: minimizedRun.events
-    })
+    artifact,
   };
   } catch (error) {
     if (error instanceof ExecutionBudgetExhausted) {

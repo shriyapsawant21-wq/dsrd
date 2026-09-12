@@ -67,6 +67,26 @@ describe("orchestration", () => {
     expect(result).toEqual({ status: "inconclusive", testedSchedules: 3, exploredCandidateSchedules: 1 });
   });
 
+  it("does not publish an artifact when the independent replay does not reproduce", async () => {
+    const result = await discoverFailure({
+      candidates: [{ id: "failing", perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }] }],
+      delayOptionsMs: [0, 1000],
+      target,
+      baselineRuns: 1,
+      confirmationRuns: 1,
+      runSchedule: async (_target, schedule) => fakeRun(schedule),
+      replaySchedule: async (_target, schedule) => ({
+        scheduleId: schedule.id,
+        status: "healthy",
+        events: [],
+        logs: [],
+      }),
+    });
+
+    expect(result).toMatchObject({ status: "inconclusive" });
+    expect(result).not.toHaveProperty("artifact");
+  });
+
   it("searches, minimizes, and produces a target-bearing artifact from runner evidence", async () => {
     const original: Schedule = {
       id: "schedule-001",

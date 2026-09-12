@@ -27,7 +27,8 @@ export function createProductionDiscoveryRunner(): DiscoveryRunner {
         testedSchedules += 1;
         onProgress(testedSchedules, candidates.length);
         return runResult;
-      }
+      },
+      replaySchedule: platform.replay.bind(platform),
     });
     return result.status === "found_failure" ? { status: "completed", artifact: result.artifact, testedSchedules: result.testedSchedules } : { status: "no_failure", testedSchedules: result.testedSchedules };
   };

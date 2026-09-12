@@ -120,6 +120,7 @@ export async function runCli(
         delayOptionsMs,
         target,
         runSchedule: runWithProgress,
+        replaySchedule,
         maxSchedules: maxRuns,
         baselineRuns,
         confirmationRuns,

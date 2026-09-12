@@ -250,6 +250,6 @@ describe("race-debugger CLI", () => {
     });
 
     expect(platform.runCalls).toBeGreaterThan(0);
-    expect(platform.replayCalls).toBe(1);
+    expect(platform.replayCalls).toBe(2);
   });
 });
