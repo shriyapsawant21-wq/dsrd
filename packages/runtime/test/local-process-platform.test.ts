@@ -148,4 +148,35 @@ describe("LocalProcessExecutionPlatform", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("reports a bounded TCP readiness timeout to the proof observer", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-local-tcp-readiness-"));
+    const manifest = join(directory, "manifest.json");
+    await writeFile(manifest, JSON.stringify({
+      workloads: [
+        { id: "server", kind: "process", perturbablePhases: [], readiness: { type: "tcp", target: "127.0.0.1:1" }, command: [process.execPath, "-e", "setInterval(() => {}, 1000)"] },
+        { id: "gate", kind: "job", perturbablePhases: [], command: [process.execPath, "-e", "setTimeout(() => process.exit(0), 100)"] },
+      ],
+    }));
+    const observations: LocalProcessObservation[] = [];
+    try {
+      const platform = new LocalProcessExecutionPlatform({
+        readinessTimeoutMs: 50,
+        readinessPollIntervalMs: 5,
+        observer: { evaluate: async (snapshot) => {
+          observations.push(snapshot);
+          return { scheduleId: snapshot.scheduleId, status: "healthy", events: [], logs: [] };
+        } },
+      });
+      await platform.run({ platform: "local-process", manifestPath: manifest }, { id: "tcp-timeout", perturbations: [] });
+
+      expect(observations[0]?.readiness).toContainEqual(expect.objectContaining({
+        workload: "server",
+        kind: "tcp",
+        status: "timeout",
+      }));
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 });

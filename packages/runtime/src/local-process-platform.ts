@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { createConnection } from "node:net";
 import { resolve } from "node:path";
 
 import type { ExecutionPlatform, RunResult, Schedule, TargetConfig, Workload } from "@dsrd/contracts";
@@ -44,6 +45,8 @@ export interface LocalProcessRunObserver {
 export type LocalProcessExecutionPlatformOptions = {
   observer: LocalProcessRunObserver;
   runTimeoutMs?: number;
+  readinessTimeoutMs?: number;
+  readinessPollIntervalMs?: number;
 };
 
 export class LocalProcessExecutionPlatform implements ExecutionPlatform {
@@ -114,16 +117,7 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
     }));
     const timeoutMs = this.options.runTimeoutMs ?? 5_000;
     await withTimeout(Promise.all(completions).then(() => undefined), timeoutMs, schedule.id);
-    const readiness = manifest.workloads.flatMap((workload): LocalProcessReadiness[] => {
-      if (workload.readiness?.type !== "process") return [];
-      const state = states.get(workload.id);
-      return [{
-        workload: workload.id,
-        kind: "process",
-        status: state?.state === "running" ? "ready" : "unhealthy",
-        observedAtMs: Date.now(),
-      }];
-    });
+    const readiness = await this.observeReadiness(manifest.workloads, states);
     const result = await this.options.observer.evaluate({
       scheduleId: schedule.id,
       startedAtMs,
@@ -157,6 +151,37 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
     child.stderr?.on("data", (data: Buffer) => logs.push(`${workload.id}: ${data.toString().trimEnd()}`));
     child.once("close", () => this.activeChildren.delete(child));
     return child;
+  }
+
+  private async observeReadiness(
+    workloads: LocalProcessWorkload[],
+    states: ReadonlyMap<string, LocalProcessState>,
+  ): Promise<LocalProcessReadiness[]> {
+    const observations = await Promise.all(workloads.map(async (workload): Promise<LocalProcessReadiness[]> => {
+      const assertion = workload.readiness;
+      if (assertion === undefined) return [];
+      if (assertion.type === "process") {
+        return [{
+          workload: workload.id,
+          kind: "process",
+          status: states.get(workload.id)?.state === "running" ? "ready" : "unhealthy",
+          observedAtMs: Date.now(),
+        }];
+      }
+      if (assertion.type !== "tcp" || assertion.target === undefined) return [];
+      const target = parseTcpTarget(assertion.target);
+      if (target === undefined) {
+        return [{ workload: workload.id, kind: "tcp", status: "unhealthy", observedAtMs: Date.now(), detail: "TCP readiness target must be host:port" }];
+      }
+      return [await probeTcpReadiness(
+        workload.id,
+        target.host,
+        target.port,
+        this.options.readinessTimeoutMs ?? 5_000,
+        this.options.readinessPollIntervalMs ?? 100,
+      )];
+    }));
+    return observations.flat();
   }
 
   private async runResetCommand(manifest: LoadedLocalProcessManifest): Promise<void> {
@@ -217,6 +242,49 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
 
 function toWorkload({ command: _command, cwd: _cwd, environment: _environment, ...workload }: LocalProcessWorkload): Workload {
   return workload;
+}
+
+function parseTcpTarget(input: string): { host: string; port: number } | undefined {
+  const separator = input.lastIndexOf(":");
+  if (separator < 1) return undefined;
+  const host = input.slice(0, separator);
+  const port = Number(input.slice(separator + 1));
+  return Number.isInteger(port) && port > 0 && port <= 65_535 ? { host, port } : undefined;
+}
+
+async function probeTcpReadiness(
+  workload: string,
+  host: string,
+  port: number,
+  timeoutMs: number,
+  pollIntervalMs: number,
+): Promise<LocalProcessReadiness> {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    if (await canConnect(host, port, Math.min(pollIntervalMs, Math.max(1, deadline - Date.now())))) {
+      return { workload, kind: "tcp", status: "ready", observedAtMs: Date.now() };
+    }
+    const remainingMs = deadline - Date.now();
+    if (remainingMs > 0) await wait(Math.min(pollIntervalMs, remainingMs));
+  } while (Date.now() < deadline);
+  return { workload, kind: "tcp", status: "timeout", observedAtMs: Date.now() };
+}
+
+function canConnect(host: string, port: number, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = createConnection({ host, port });
+    let settled = false;
+    const finish = (connected: boolean) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(connected);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once("connect", () => finish(true));
+    socket.once("error", () => finish(false));
+    socket.once("timeout", () => finish(false));
+  });
 }
 
 function wait(delayMs: number): Promise<void> {
