@@ -142,7 +142,8 @@ export async function runCli(
           events: result.artifact.events,
           useColor: dependencies.useColor,
           scope: { workloads: workloads.length, dimensions, candidates: candidateMaximum },
-          exploredSchedules: result.testedSchedules,
+          exploredSchedules: result.exploredCandidateSchedules,
+          physicalAttempts: result.testedSchedules,
           originalPerturbations: result.artifact.originalSchedule.perturbations.length
         })
       );

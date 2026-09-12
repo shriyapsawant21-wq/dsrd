@@ -27,15 +27,18 @@ export type DiscoveryResult =
   | {
       status: "found_failure";
       testedSchedules: number;
+      exploredCandidateSchedules: number;
       artifact: FailureArtifact;
     }
   | {
       status: "no_failure";
       testedSchedules: number;
+      exploredCandidateSchedules: number;
     }
   | {
       status: "target_unhealthy" | "execution_error" | "inconclusive";
       testedSchedules: number;
+      exploredCandidateSchedules: number;
       diagnostics?: RunResult["diagnostics"];
     };
 
@@ -83,6 +86,7 @@ export async function discoverFailure(
           ? "execution_error"
           : "inconclusive",
       testedSchedules: executions,
+      exploredCandidateSchedules: 0,
       ...(baselineEvidence.diagnostics === undefined ? {} : { diagnostics: baselineEvidence.diagnostics }),
     };
   }
@@ -96,7 +100,7 @@ export async function discoverFailure(
       searchOptions,
     );
   if (searchResult.status === "no_failure") {
-    return { ...searchResult, testedSchedules: executions };
+    return { ...searchResult, testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
   }
 
   const confirmation = await confirmFailure(
@@ -106,7 +110,7 @@ export async function discoverFailure(
     confirmationRuns - 1,
     runSchedule,
   );
-  if (!confirmation) return { status: "inconclusive", testedSchedules: executions };
+  if (!confirmation) return { status: "inconclusive", testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
 
   const runReproducibly: RunSchedule = async (target, schedule) => {
     const first = await runSchedule(target, schedule);
@@ -121,12 +125,13 @@ export async function discoverFailure(
   );
   const minimizedRun = await runReproducibly(options.target, minimizedSchedule);
   if (minimizedRun.status !== "workload_failure") {
-    return { status: "inconclusive", testedSchedules: executions };
+    return { status: "inconclusive", testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
   }
 
   return {
     status: "found_failure",
     testedSchedules: executions,
+    exploredCandidateSchedules: searchResult.testedSchedules,
     artifact: createFailureArtifact({
       createdAt: options.createdAt ?? new Date().toISOString(),
       target: options.target,

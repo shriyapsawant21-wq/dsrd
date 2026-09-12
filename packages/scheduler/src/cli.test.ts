@@ -107,7 +107,8 @@ describe("race-debugger CLI", () => {
     expect(output.join("\n")).toContain("Failure reason: fake platform: bootstrap unavailable");
     expect(output.join("\n")).toContain("Failure evidence: api startup_failed at 2500ms — fake platform: bootstrap was not ready");
     expect(output.join("\n")).toContain("Search scope:");
-    expect(output.join("\n")).toContain("Scope explored: 2 of 3 candidate schedules (stopped at first failure).");
+    expect(output.join("\n")).toContain("Scope explored: 1 of 3 candidate schedules (stopped at first failure).");
+    expect(output.join("\n")).toContain("Physical attempts: 6.");
     expect(output.join("\n")).toContain("Minimization: 1 perturbation(s) → 1 perturbation(s).");
     await expect(loadFailureArtifact(artifactPath)).resolves.toMatchObject({ version: 2 });
   });

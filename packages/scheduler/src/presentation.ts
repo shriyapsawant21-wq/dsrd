@@ -10,6 +10,7 @@ type ResultSummaryInput = {
   useColor?: boolean;
   scope?: { workloads: number; dimensions: number; candidates: number };
   exploredSchedules?: number;
+  physicalAttempts?: number;
   originalPerturbations?: number;
 };
 
@@ -42,7 +43,7 @@ export function renderResultSummary(input: ResultSummaryInput): string {
     case "failure":
       const artifactPath = input.artifactPath ?? "failure.json";
       const summary = [
-        `Failure found after ${input.testedSchedules ?? 0} schedules.`,
+        `Failure found after ${input.testedSchedules ?? 0} physical attempts.`,
         `Saved replay artifact: ${artifactPath}`,
         `Replay (PowerShell): race-debugger replay ${quotePowerShellArgument(artifactPath)}`,
         `Replay (POSIX): race-debugger replay ${quotePosixArgument(artifactPath)}`
@@ -70,6 +71,9 @@ export function renderResultSummary(input: ResultSummaryInput): string {
         summary.push(
           `Scope explored: ${input.exploredSchedules} of ${input.scope?.candidates ?? input.exploredSchedules} candidate schedules (stopped at first failure).`
         );
+      }
+      if (input.physicalAttempts !== undefined) {
+        summary.push(`Physical attempts: ${input.physicalAttempts}.`);
       }
       if (input.originalPerturbations !== undefined) {
         summary.push(

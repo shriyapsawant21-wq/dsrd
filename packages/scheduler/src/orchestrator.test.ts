@@ -20,7 +20,7 @@ describe("orchestration", () => {
       }),
     });
 
-    expect(result).toEqual({ status: "target_unhealthy", testedSchedules: 1 });
+    expect(result).toEqual({ status: "target_unhealthy", testedSchedules: 1, exploredCandidateSchedules: 0 });
   });
 
   it("searches, minimizes, and produces a target-bearing artifact from runner evidence", async () => {
@@ -43,6 +43,7 @@ describe("orchestration", () => {
     expect(result).toEqual({
       status: "found_failure",
       testedSchedules: 10,
+      exploredCandidateSchedules: 1,
       artifact: {
         version: 2,
         createdAt: "2026-08-29T00:00:00.000Z",
