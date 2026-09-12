@@ -176,9 +176,7 @@ export async function replayFailure(
   const reasonMatches =
     artifact.expectedFailureReason === undefined ||
     artifact.expectedFailureReason === result.failureReason;
-  const evidenceMatches = artifact.events.every((expected) =>
-    result.events.some((actual) => sameEvidence(expected, actual))
-  );
+  const evidenceMatches = hasOrderedEvidence(artifact.events, result.events);
 
   return {
     status:
@@ -194,4 +192,19 @@ function sameEvidence(expected: TimelineEvent, actual: TimelineEvent): boolean {
     expected.service === actual.service &&
     expected.event === actual.event
   );
+}
+
+function hasOrderedEvidence(
+  expectedEvents: readonly TimelineEvent[],
+  actualEvents: readonly TimelineEvent[],
+): boolean {
+  let actualIndex = 0;
+  for (const expected of expectedEvents) {
+    while (actualIndex < actualEvents.length && !sameEvidence(expected, actualEvents[actualIndex]!)) {
+      actualIndex += 1;
+    }
+    if (actualIndex === actualEvents.length) return false;
+    actualIndex += 1;
+  }
+  return true;
 }

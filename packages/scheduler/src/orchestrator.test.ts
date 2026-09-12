@@ -182,6 +182,30 @@ describe("orchestration", () => {
     ).resolves.toMatchObject({ status: "not_reproduced" });
   });
 
+  it("does not reproduce when matching timeline evidence occurs in reverse order", async () => {
+    const artifact = {
+      version: 2 as const,
+      createdAt: "2026-08-29T00:00:00.000Z",
+      target,
+      originalSchedule: { id: "original", perturbations: [] },
+      minimizedSchedule: { id: "minimal", perturbations: [] },
+      events: [
+        { timeMs: 100, service: "postgres", event: "readiness_withheld" },
+        { timeMs: 200, service: "api", event: "startup_failed" },
+      ],
+    };
+
+    await expect(replayFailure(artifact, async (_target, schedule) => ({
+      scheduleId: schedule.id,
+      status: "workload_failure",
+      events: [
+        { timeMs: 100, service: "api", event: "startup_failed" },
+        { timeMs: 200, service: "postgres", event: "readiness_withheld" },
+      ],
+      logs: [],
+    }))).resolves.toMatchObject({ status: "not_reproduced" });
+  });
+
   it("reproduces matching oracle evidence when diagnostic detail changes", async () => {
     const artifact = {
       version: 2 as const,
