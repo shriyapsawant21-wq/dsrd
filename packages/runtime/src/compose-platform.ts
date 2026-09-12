@@ -47,6 +47,10 @@ export class DockerComposeServiceDiscovery implements ComposeServiceDiscovery {
     if (!this.hasServices(config)) {
       throw new Error("Compose config does not contain a services object");
     }
+    const externalVolumes = this.externalVolumes(config);
+    if (externalVolumes.length > 0) {
+      throw new Error(`Compose configuration declares external volumes: ${externalVolumes.join(", ")}`);
+    }
     return Object.entries(config.services).map(([id, service]) => {
       const dependencyEdges = this.dependencyEdges(service);
       const dependsOn = dependencyEdges?.map(({ workloadId }) => workloadId);
@@ -63,6 +67,17 @@ export class DockerComposeServiceDiscovery implements ComposeServiceDiscovery {
   private hasServices(config: unknown): config is { services: Record<string, unknown> } {
     return typeof config === "object" && config !== null && "services" in config &&
       typeof config.services === "object" && config.services !== null && !Array.isArray(config.services);
+  }
+
+  private externalVolumes(config: unknown): string[] {
+    if (typeof config !== "object" || config === null || !("volumes" in config) ||
+      typeof config.volumes !== "object" || config.volumes === null || Array.isArray(config.volumes)) {
+      return [];
+    }
+    return Object.entries(config.volumes)
+      .filter(([, volume]) => typeof volume === "object" && volume !== null && "external" in volume && volume.external === true)
+      .map(([name]) => name)
+      .sort();
   }
 
   private dependencyEdges(service: unknown): DependencyEdge[] | undefined {

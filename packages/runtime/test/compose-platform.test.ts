@@ -70,6 +70,26 @@ class RecordingExecutor implements ComposeScheduleExecutor {
 }
 
 describe("ComposeExecutionPlatform", () => {
+  it("rejects Compose configurations that declare external volumes", async () => {
+    const runner: CommandRunner = {
+      async run() {
+        return {
+          stdout: JSON.stringify({
+            services: { api: { volumes: ["shared-data:/var/lib/app"] } },
+            volumes: { "shared-data": { external: true } },
+          }),
+          stderr: "",
+          exitCode: 0,
+        };
+      },
+    };
+    const discovery = new DockerComposeServiceDiscovery({ projectDirectory: "/workspace/fixture", runner });
+
+    await expect(discovery.discoverServices(target)).rejects.toThrow(
+      "Compose configuration declares external volumes: shared-data",
+    );
+  });
+
   it("loads Compose service dependencies from docker compose config", async () => {
     const runner = new ConfigRunner();
     const discovery = new DockerComposeServiceDiscovery({
