@@ -48,7 +48,7 @@ export async function runCli(
     platform: fakePlatform,
     log: console.log
   }
-): Promise<void> {
+): Promise<number> {
   if (args.length === 0 && dependencies.interactive) {
     dependencies.log(renderDashboard(dependencies.useColor ?? false));
     const prompt = dependencies.prompt ?? createReadlinePrompt();
@@ -57,20 +57,20 @@ export async function runCli(
       const action = await chooseMenuAction(prompt, dependencies.log);
       if (action === "quit") {
         dependencies.log("See you next time.");
-        return;
+        return 0;
       }
 
-      await runCli(await collectGuidedArgs(action, prompt, dependencies.log), {
+      return runCli(await collectGuidedArgs(action, prompt, dependencies.log), {
         ...dependencies,
         prompt: undefined
       });
-      return;
     } finally {
       prompt.close();
     }
   }
 
   const program = new Command();
+  let exitCode = 0;
   const runSchedule = dependencies.platform.run.bind(dependencies.platform);
   const replaySchedule = dependencies.platform.replay.bind(dependencies.platform);
   program.name("race-debugger").description("Explore startup timing races");
@@ -127,6 +127,7 @@ export async function runCli(
       });
 
       if (result.status !== "found_failure") {
+        exitCode = result.status === "no_failure" ? 0 : discoveryExitCode(result.status);
         dependencies.log(
           renderResultSummary({
             status: result.status === "no_failure" ? "no-failure" : result.status,
@@ -165,6 +166,7 @@ export async function runCli(
     .action(async (artifactPath: string) => {
       const artifact = await loadFailureArtifact(artifactPath);
       const result = await replayFailure(artifact, replaySchedule);
+      exitCode = result.status === "reproduced" ? 0 : 4;
       const evidenceMatched = artifact.events.filter((expected) =>
         result.result.events.some((actual) =>
           actual.service === expected.service && actual.event === expected.event
@@ -181,10 +183,22 @@ export async function runCli(
 
   if (args.length === 0) {
     dependencies.log(program.helpInformation());
-    return;
+    return 0;
   }
 
   await program.parseAsync(["node", "race-debugger", ...args]);
+  return exitCode;
+}
+
+function discoveryExitCode(status: Exclude<Parameters<typeof renderResultSummary>[0]["status"], "failure" | "reproduced" | "not-reproduced" | "no-failure">): number {
+  switch (status) {
+    case "needs_configuration": return 2;
+    case "unsupported_target": return 3;
+    case "target_unhealthy": return 4;
+    case "execution_error": return 5;
+    case "inconclusive": return 6;
+    case "cancelled": return 130;
+  }
 }
 
 async function collectGuidedArgs(

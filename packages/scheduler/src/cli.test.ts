@@ -207,6 +207,17 @@ describe("race-debugger CLI", () => {
     expect(output.join("\n")).toContain("Failure found");
   });
 
+  it("returns a stable success exit code after publishing a verified artifact", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-exit-"));
+    directories.push(directory);
+    await writeFile(join(directory, "manifest.json"), "{}\n");
+
+    await expect(runCli(
+      ["search", "--platform", "local-process", "--target", directory, "--output", join(directory, "failure.json")],
+      { platform: fakePlatform, log: () => undefined },
+    )).resolves.toBe(0);
+  });
+
   it("replays the saved minimized schedule through the injected runner", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-"));
     directories.push(directory);
