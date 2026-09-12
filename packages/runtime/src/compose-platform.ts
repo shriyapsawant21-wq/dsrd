@@ -1,5 +1,6 @@
 import type {
   ExecutionPlatform,
+  DependencyEdge,
   RunResult,
   Schedule,
   TargetConfig,
@@ -12,6 +13,7 @@ import { DockerCommandError } from "./docker-compose-client.js";
 export type ComposeServiceDefinition = {
   id: string;
   dependsOn?: string[];
+  dependencyEdges?: DependencyEdge[];
   kind?: Workload["kind"];
 };
 
@@ -45,11 +47,13 @@ export class DockerComposeServiceDiscovery implements ComposeServiceDiscovery {
       throw new Error("Compose config does not contain a services object");
     }
     return Object.entries(config.services).map(([id, service]) => {
-      const dependsOn = this.dependsOn(service);
+      const dependencyEdges = this.dependencyEdges(service);
+      const dependsOn = dependencyEdges?.map(({ workloadId }) => workloadId);
       const kind = this.workloadKind(service);
       return {
         id,
         ...(dependsOn === undefined ? {} : { dependsOn }),
+        ...(dependencyEdges === undefined ? {} : { dependencyEdges }),
         ...(kind === undefined ? {} : { kind }),
       };
     });
@@ -60,18 +64,40 @@ export class DockerComposeServiceDiscovery implements ComposeServiceDiscovery {
       typeof config.services === "object" && config.services !== null && !Array.isArray(config.services);
   }
 
-  private dependsOn(service: unknown): string[] | undefined {
+  private dependencyEdges(service: unknown): DependencyEdge[] | undefined {
     if (typeof service !== "object" || service === null || !("depends_on" in service)) {
       return undefined;
     }
     const dependsOn = service.depends_on;
     if (Array.isArray(dependsOn)) {
-      return dependsOn.filter((dependency): dependency is string => typeof dependency === "string");
+      const edges = dependsOn
+        .filter((dependency): dependency is string => typeof dependency === "string")
+        .map((workloadId) => ({
+          workloadId,
+          condition: "service_started" as const,
+          provenance: "declared" as const,
+        }));
+      return edges.length === 0 ? undefined : edges;
     }
     if (typeof dependsOn === "object" && dependsOn !== null) {
-      return Object.keys(dependsOn);
+      const edges = Object.entries(dependsOn).map(([workloadId, config]) => ({
+        workloadId,
+        condition: this.dependencyCondition(config),
+        provenance: "declared" as const,
+      }));
+      return edges.length === 0 ? undefined : edges;
     }
     return undefined;
+  }
+
+  private dependencyCondition(dependency: unknown): DependencyEdge["condition"] {
+    if (typeof dependency !== "object" || dependency === null || !("condition" in dependency)) {
+      return "service_started";
+    }
+    const condition = dependency.condition;
+    return condition === "service_healthy" || condition === "service_completed_successfully"
+      ? condition
+      : "service_started";
   }
 
   private workloadKind(service: unknown): Workload["kind"] | undefined {
@@ -114,6 +140,7 @@ export class ComposeExecutionPlatform implements ExecutionPlatform {
       id: service.id,
       kind: service.kind ?? "service",
       ...(service.dependsOn === undefined ? {} : { dependsOn: service.dependsOn }),
+      ...(service.dependencyEdges === undefined ? {} : { dependencyEdges: service.dependencyEdges }),
       perturbablePhases: this.options.supportsReadinessDelay === true ? ["start", "ready"] : ["start"]
     }));
   }

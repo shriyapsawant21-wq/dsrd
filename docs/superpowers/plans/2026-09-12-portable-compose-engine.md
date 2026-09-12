@@ -146,12 +146,12 @@ export type DependencyEdge = {
 export type Workload = { /* existing fields */ dependencyEdges?: DependencyEdge[] };
 ```
 
-- [ ] Add a discovery test with short and long `depends_on` syntax and literal expected dependency-edge conditions.
-- [ ] Run it and confirm discovery currently retains only dependency IDs.
-- [ ] Parse and normalize both syntaxes; preserve declared dependency gates in the workload model.
-- [ ] Add a test that rejects a readiness perturbation unless the platform advertises a concrete readiness-delay capability.
-- [ ] Run runtime contracts/platform tests and typecheck.
-- [ ] Commit `feat(runtime): retain compose dependency capabilities`.
+- [x] Add a discovery test with short and long `depends_on` syntax and literal expected dependency-edge conditions.
+- [x] Run it and confirm discovery currently retains only dependency IDs.
+- [x] Parse and normalize both syntaxes; preserve declared dependency gates in the workload model.
+- [x] Add a test that rejects a readiness perturbation unless the platform advertises a concrete readiness-delay capability.
+- [x] Run runtime contracts/platform tests and typecheck.
+- [x] Commit `feat(runtime): retain compose dependency capabilities`.
 
 ### Task 6: Add baseline confirmation and experiment outcomes
 

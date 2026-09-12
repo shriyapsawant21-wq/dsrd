@@ -1,7 +1,14 @@
+export type DependencyEdge = {
+  workloadId: string;
+  condition: "service_started" | "service_healthy" | "service_completed_successfully";
+  provenance: "declared" | "configured";
+};
+
 export type Workload = {
   id: string;
   kind: "service" | "process" | "job" | "initializer";
   dependsOn?: string[];
+  dependencyEdges?: DependencyEdge[];
   perturbablePhases: Array<"start" | "ready">;
   readiness?: {
     type: "http" | "tcp" | "process" | "custom";

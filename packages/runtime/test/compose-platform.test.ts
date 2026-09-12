@@ -17,7 +17,15 @@ class RecordingDiscovery implements ComposeServiceDiscovery {
   async discoverServices() {
     return [
       { id: "postgres" },
-      { id: "api", dependsOn: ["postgres"] },
+      {
+        id: "api",
+        dependsOn: ["postgres"],
+        dependencyEdges: [{
+          workloadId: "postgres",
+          condition: "service_started" as const,
+          provenance: "declared" as const,
+        }],
+      },
       { id: "worker", kind: "job" as const },
     ];
   }
@@ -32,7 +40,8 @@ class ConfigRunner implements CommandRunner {
       stdout: JSON.stringify({
         services: {
           postgres: {},
-          api: { depends_on: { postgres: { condition: "service_healthy" } } }
+          api: { depends_on: { postgres: { condition: "service_healthy" } } },
+          worker: { depends_on: ["api"] },
         }
       }),
       stderr: "",
@@ -70,7 +79,24 @@ describe("ComposeExecutionPlatform", () => {
 
     await expect(discovery.discoverServices(target)).resolves.toEqual([
       { id: "postgres" },
-      { id: "api", dependsOn: ["postgres"] }
+      {
+        id: "api",
+        dependsOn: ["postgres"],
+        dependencyEdges: [{
+          workloadId: "postgres",
+          condition: "service_healthy",
+          provenance: "declared",
+        }],
+      },
+      {
+        id: "worker",
+        dependsOn: ["api"],
+        dependencyEdges: [{
+          workloadId: "api",
+          condition: "service_started",
+          provenance: "declared",
+        }],
+      },
     ]);
     expect(runner.invocation).toEqual({
       command: "docker",
@@ -92,6 +118,11 @@ describe("ComposeExecutionPlatform", () => {
         id: "api",
         kind: "service",
         dependsOn: ["postgres"],
+        dependencyEdges: [{
+          workloadId: "postgres",
+          condition: "service_started",
+          provenance: "declared",
+        }],
         perturbablePhases: ["start"]
       },
       { id: "worker", kind: "job", perturbablePhases: ["start"] },
@@ -139,5 +170,21 @@ describe("ComposeExecutionPlatform", () => {
       { id: "s1", services: ["postgres", "api", "worker"] },
       { id: "replay:s1", services: ["postgres", "api", "worker"] }
     ]);
+  });
+
+  it("rejects readiness perturbations unless the platform exposes that capability", async () => {
+    const executor = new RecordingExecutor();
+    const platform = new ComposeExecutionPlatform({
+      discovery: new RecordingDiscovery(),
+      executorFor: () => executor,
+    });
+    const schedule = {
+      id: "ready-s1",
+      perturbations: [{ workloadId: "api", phase: "ready" as const, delayMs: 25 }],
+    };
+
+    await expect(platform.run(target, schedule)).rejects.toThrow(
+      "Unsupported Compose phase ready for api",
+    );
   });
 });
