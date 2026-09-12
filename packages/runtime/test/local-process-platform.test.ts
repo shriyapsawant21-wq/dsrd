@@ -213,6 +213,67 @@ describe("LocalProcessExecutionPlatform", () => {
     }
   });
 
+  it("reports malformed readiness targets without attempting an unbounded probe", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-local-malformed-readiness-"));
+    const manifest = join(directory, "manifest.json");
+    await writeFile(manifest, JSON.stringify({
+      workloads: [
+        { id: "http", kind: "process", perturbablePhases: [], readiness: { type: "http", target: "not-a-url" }, command: [process.execPath, "-e", "setInterval(() => {}, 1000)"] },
+        { id: "tcp", kind: "process", perturbablePhases: [], readiness: { type: "tcp", target: "not-a-host-port" }, command: [process.execPath, "-e", "setInterval(() => {}, 1000)"] },
+        { id: "gate", kind: "job", perturbablePhases: [], command: [process.execPath, "-e", "setTimeout(() => process.exit(0), 20)"] },
+      ],
+    }));
+    const observations: LocalProcessObservation[] = [];
+    try {
+      const platform = new LocalProcessExecutionPlatform({
+        observer: { evaluate: async (snapshot) => {
+          observations.push(snapshot);
+          return { scheduleId: snapshot.scheduleId, status: "healthy", events: [], logs: [] };
+        } },
+      });
+
+      await platform.run({ platform: "local-process", manifestPath: manifest }, { id: "malformed-readiness", perturbations: [] });
+
+      expect(observations[0]?.readiness).toEqual(expect.arrayContaining([
+        expect.objectContaining({ workload: "http", kind: "http", status: "unhealthy" }),
+        expect.objectContaining({ workload: "tcp", kind: "tcp", status: "unhealthy" }),
+      ]));
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("does not accept a reachable HTTP endpoint that returns an unexpected status", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-local-http-status-"));
+    const manifest = join(directory, "manifest.json");
+    const port = await availablePort();
+    await writeFile(manifest, JSON.stringify({
+      workloads: [
+        { id: "server", kind: "process", perturbablePhases: [], readiness: { type: "http", target: `http://127.0.0.1:${port}/ready` }, command: [process.execPath, "-e", `require('node:http').createServer((_request, response) => { response.statusCode = 503; response.end('unavailable'); }).listen(${port})`] },
+        { id: "gate", kind: "job", perturbablePhases: [], command: [process.execPath, "-e", "setTimeout(() => process.exit(0), 20)"] },
+      ],
+    }));
+    const observations: LocalProcessObservation[] = [];
+    try {
+      const platform = new LocalProcessExecutionPlatform({
+        readinessTimeoutMs: 50,
+        readinessPollIntervalMs: 5,
+        observer: { evaluate: async (snapshot) => {
+          observations.push(snapshot);
+          return { scheduleId: snapshot.scheduleId, status: "healthy", events: [], logs: [] };
+        } },
+      });
+
+      await platform.run({ platform: "local-process", manifestPath: manifest }, { id: "http-status", perturbations: [] });
+
+      expect(observations[0]?.readiness).toContainEqual(expect.objectContaining({
+        workload: "server", kind: "http", status: "timeout",
+      }));
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("reports an explicit reset configuration error for a stateful manifest", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-local-reset-required-"));
     const manifest = join(directory, "manifest.json");
