@@ -51,6 +51,7 @@ export const inspectionResultSchema = z.object({
   diagnostics: z.array(runDiagnosticSchema),
 }).strict();
 export type InspectionResult = z.infer<typeof inspectionResultSchema>;
+export type RepositorySnapshot = { id: string; origin?: string; resolvedRevision?: string; contentDigest: string; inputPaths: string[] };
 
 const dependencySchema = z.object({
   workloadId: identifierSchema,

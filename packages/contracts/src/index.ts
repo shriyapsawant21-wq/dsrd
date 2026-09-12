@@ -77,4 +77,4 @@ export type { FailureArtifact, FailureArtifactV2, FailureArtifactV3, FailureSign
 export { failureArtifactSchema, failureArtifactV2Schema, failureArtifactV3Schema } from "./evidence.js";
 export type { AppliedPerturbation, AttemptContext, AttemptHandle, CleanupReport, PreparedTarget, WorkloadCapability, WorkloadModel } from "./execution.js";
 export { defaultExperimentPolicy, experimentPolicySchema, inspectionResultSchema, parseProjectConfig, projectConfigSchema, repositoryInputSchema, runDiagnosticSchema, targetCandidateSchema } from "./repository.js";
-export type { ExperimentPolicy, InspectionResult, ProjectConfig, ReadinessAssertion, RepositoryInput, TargetCandidate, WorkloadConfig } from "./repository.js";
+export type { ExperimentPolicy, InspectionResult, ProjectConfig, ReadinessAssertion, RepositoryInput, RepositorySnapshot, TargetCandidate, WorkloadConfig } from "./repository.js";
