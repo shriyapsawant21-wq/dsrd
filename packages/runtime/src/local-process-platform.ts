@@ -116,6 +116,9 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
       cwd: workload.cwd === undefined ? manifest.directory : resolve(manifest.directory, workload.cwd),
       env: { ...process.env, ...workload.environment, DSRD_READY_DELAY_MS: String(readyDelayMs) },
       stdio: ["ignore", "pipe", "pipe"] as const,
+      // A detached POSIX child becomes the leader of an attempt-owned process
+      // group, so cleanup can terminate descendants as well as the launcher.
+      detached: process.platform !== "win32",
     });
     this.activeChildren.add(child);
     child.stdout?.on("data", (data: Buffer) => logs.push(`${workload.id}: ${data.toString().trimEnd()}`));
@@ -134,8 +137,35 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
 
   private async stopChildren(): Promise<void> {
     const children = [...this.activeChildren];
-    for (const child of children) child.kill("SIGTERM");
+    for (const child of children) this.signalAttemptTree(child, "SIGTERM");
+    await wait(100);
+    for (const child of children) {
+      if (this.isAttemptTreeAlive(child)) this.signalAttemptTree(child, "SIGKILL");
+    }
     await Promise.all(children.map(waitForExit));
+  }
+
+  private signalAttemptTree(child: ChildProcess, signal: NodeJS.Signals): void {
+    try {
+      if (process.platform !== "win32" && child.pid !== undefined) {
+        process.kill(-child.pid, signal);
+      } else {
+        child.kill(signal);
+      }
+    } catch (error) {
+      if (!(error instanceof Error) || !("code" in error) || error.code !== "ESRCH") throw error;
+    }
+  }
+
+  private isAttemptTreeAlive(child: ChildProcess): boolean {
+    if (child.pid === undefined) return false;
+    try {
+      process.kill(process.platform !== "win32" ? -child.pid : child.pid, 0);
+      return true;
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ESRCH") return false;
+      throw error;
+    }
   }
 
   private async manifestFor(target: TargetConfig): Promise<LoadedLocalProcessManifest> {
@@ -162,6 +192,7 @@ function wait(delayMs: number): Promise<void> {
 }
 
 function waitForExit(child: ChildProcess): Promise<number> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(child.exitCode ?? 1);
   return new Promise((resolve, reject) => {
     child.once("error", reject);
     child.once("close", (code) => resolve(code ?? 1));

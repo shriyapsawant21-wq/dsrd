@@ -1,4 +1,7 @@
 import { fileURLToPath } from "node:url";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { RunResult } from "@dsrd/contracts";
 import { WorkloadProofObserver } from "@dsrd/proof";
@@ -72,5 +75,26 @@ describe("LocalProcessExecutionPlatform", () => {
       status: "workload_failure",
       failureReason: expect.stringContaining("exited with code 1"),
     });
+  });
+
+  it("terminates a workload's child process before releasing the attempt", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-local-cleanup-"));
+    const pidFile = join(directory, "child.pid");
+    const manifest = join(directory, "manifest.json");
+    const script = "const { spawn } = require('node:child_process'); const fs = require('node:fs'); const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }); fs.writeFileSync(process.env.DSRD_CHILD_PID_FILE, String(child.pid)); setInterval(() => {}, 1000);";
+    await writeFile(manifest, JSON.stringify({
+      workloads: [
+        { id: "parent", kind: "process", perturbablePhases: [], command: [process.execPath, "-e", script], environment: { DSRD_CHILD_PID_FILE: pidFile } },
+        { id: "gate", kind: "job", perturbablePhases: [], command: [process.execPath, "-e", "setTimeout(() => process.exit(0), 100)"] },
+      ],
+    }));
+    try {
+      const platform = new LocalProcessExecutionPlatform({ observer });
+      await expect(platform.run({ platform: "local-process", manifestPath: manifest }, { id: "cleanup", perturbations: [] })).resolves.toMatchObject({ status: "healthy" });
+      const childPid = Number(await readFile(pidFile, "utf8"));
+      expect(() => process.kill(childPid, 0)).toThrow();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
