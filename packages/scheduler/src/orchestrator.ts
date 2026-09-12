@@ -47,13 +47,15 @@ export type ReplayResult = {
   result: RunResult;
 };
 
+class ExecutionBudgetExhausted extends Error {}
+
 export async function discoverFailure(
   options: DiscoverFailureOptions
 ): Promise<DiscoveryResult> {
   let executions = 0;
   const runSchedule = async (target: TargetConfig, schedule: Schedule): Promise<RunResult> => {
     if (options.maxSchedules !== undefined && executions >= options.maxSchedules) {
-      throw new Error("Maximum schedule execution budget exhausted");
+      throw new ExecutionBudgetExhausted("Maximum schedule execution budget exhausted");
     }
     executions += 1;
     return options.runSchedule(target, schedule);
@@ -67,6 +69,8 @@ export async function discoverFailure(
   if (!Number.isInteger(confirmationRuns) || confirmationRuns < 1) {
     throw new RangeError("confirmationRuns must be a positive integer");
   }
+  let exploredCandidateSchedules = 0;
+  try {
   let baselineResult: RunResult | undefined;
   for (let run = 0; run < baselineRuns; run += 1) {
     baselineResult = await runSchedule(options.target, baseline);
@@ -99,6 +103,7 @@ export async function discoverFailure(
       runSchedule,
       searchOptions,
     );
+  exploredCandidateSchedules = searchResult.testedSchedules;
   if (searchResult.status === "no_failure") {
     return { ...searchResult, testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
   }
@@ -141,6 +146,12 @@ export async function discoverFailure(
       events: minimizedRun.events
     })
   };
+  } catch (error) {
+    if (error instanceof ExecutionBudgetExhausted) {
+      return { status: "inconclusive", testedSchedules: executions, exploredCandidateSchedules };
+    }
+    throw error;
+  }
 }
 
 async function confirmFailure(

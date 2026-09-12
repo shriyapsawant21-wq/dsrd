@@ -117,7 +117,7 @@ describe("orchestration", () => {
     });
   });
 
-  it("never exceeds the physical execution budget during minimization", async () => {
+  it("returns inconclusive without publishing an artifact when the physical execution budget is exhausted", async () => {
     const calls: string[] = [];
     await expect(discoverFailure({
       candidates: [
@@ -131,7 +131,11 @@ describe("orchestration", () => {
         calls.push(schedule.id);
         return fakeRun(schedule);
       },
-    })).rejects.toThrow("Maximum schedule execution budget exhausted");
+    })).resolves.toEqual({
+      status: "inconclusive",
+      testedSchedules: 2,
+      exploredCandidateSchedules: 1,
+    });
 
     expect(calls).toEqual(["baseline", "failing"]);
   });
