@@ -185,3 +185,45 @@ node -e 'const a=require("./failure.json"); console.log(JSON.stringify({target:a
 
 Always replay the saved artifact after discovery. If replay does not reproduce
 the expected failure and ordering evidence, treat the result as unverified.
+
+### Public projects to try
+
+These repositories are good disposable targets because they are public, have
+multiple Compose services, and document their local setup. Clone one into a
+temporary directory, inspect its Compose file and required environment values,
+then pass the file path to DSRD.
+
+- [Docker Awesome Compose](https://github.com/docker/awesome-compose) — a large
+  catalog of small, independent samples. Choose one sample directory and use
+  its `compose.yaml`.
+- [Docker Todo List App](https://github.com/dockersamples/todo-list-app) — a
+  compact application stack with a checked-in `compose.yaml`.
+- [Docker Example Voting App](https://github.com/dockersamples/example-voting-app)
+  — a multi-service application useful for observing startup ordering.
+- [Docker Compose Dev Environment](https://github.com/dockersamples/compose-dev-env)
+  — proxy, backend, and database services with a documented
+  `docker-compose.yaml`.
+
+Example:
+
+```bash
+tmp_dir="$(mktemp -d)"
+git clone --depth 1 https://github.com/dockersamples/todo-list-app "$tmp_dir/todo-list-app"
+cd "$tmp_dir/todo-list-app"
+docker compose -f compose.yaml config --quiet
+docker compose -f compose.yaml down -v --remove-orphans
+
+# From the DSRD checkout:
+node packages/scheduler/dist/cli.js search \
+  --platform compose \
+  --target "$tmp_dir/todo-list-app/compose.yaml" \
+  --delay-options 0,500,1000 \
+  --output todo-list-failure.json
+node packages/scheduler/dist/cli.js replay todo-list-failure.json
+```
+
+Treat third-party repositories as untrusted inputs: do not edit their tracked
+files to manufacture a race, do not expose secrets, and remove only the exact
+Compose project you started. Some samples require a `.env` file, local build
+contexts, host ports, or architecture-specific images; report those as setup
+constraints if preflight cannot complete.
