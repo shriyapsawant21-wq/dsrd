@@ -7,10 +7,10 @@ Branch: `feat/repository-onboarding`
 | 1. Contracts and schemas | Complete | `55d31c5`; contracts/artifact tests and workspace typecheck |
 | 2. Read-only inspection and selection | Complete | `306cd67`; discovery tests and workspace typecheck |
 | 3. Pinned Git acquisition and snapshots | Complete | `81ff5be`, `6451f68`; detached revision is now frozen read-only and disposal thaws only the owned snapshot |
-| 4. Isolated Compose attempts | In progress | Fresh opaque attempt IDs and pre-measurement prepare/reset exist; explicit host-port and external-volume classification plus Docker conformance remain |
-| 5. Confirmation, replay, artifact v3 | In progress | Candidate schedules and physical attempts are now reported separately; repeated-signature confirmation, ordered independent replay, and v3 publication gating remain |
+| 4. Isolated Compose attempts | In progress | Fresh opaque attempt IDs, pre-measurement prepare/reset, cleanup after preparation failure, and `host_port_conflict` classification exist; external-volume policy and Docker conformance remain |
+| 5. Confirmation, replay, artifact v3 | In progress | Three healthy baselines and matching failures are required by default; structured signatures, budget-to-`inconclusive`, ordered replay, and public-flow pre-publication replay gates exist; v3 serialization/provenance and required replay repetitions remain |
 | 6. Local-process adapter | In progress | `045a562`, `e04d211`; owned POSIX process trees receive TERM then KILL and timeout returns `execution_error`; readiness probes, reset-policy configuration, and cleanup reporting remain |
-| 7. CLI/API workflows | Pending | Shared inspect/init/prepare/search/replay service flow and stable JSON/exit-code contract remain |
+| 7. CLI/API workflows | In progress | CLI exposes baseline/confirmation counts and explicit terminal outcomes; CLI/API use the shared replay gate; stable JSON/exit codes and end-to-end onboarding commands remain |
 | 8. Conformance and documentation | In progress | Workspace suite/typecheck pass; Docker-gated Compose conformance, public-repository checks, and outcome/publication regression coverage remain |
 
 Published branch commits are pushed to `origin/feat/repository-onboarding`.
