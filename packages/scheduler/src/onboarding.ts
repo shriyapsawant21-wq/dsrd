@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { access, constants } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import type { ExecutionPlatform, FailureArtifactV3, RepositoryInput, RunDiagnostic, Schedule, TargetCandidate, TargetConfig } from "@dsrd/contracts";
+import type { ExecutionPlatform, FailureArtifact, FailureArtifactV3, RepositoryInput, RunDiagnostic, Schedule, TargetCandidate, TargetConfig } from "@dsrd/contracts";
 import { defaultExperimentPolicy } from "@dsrd/contracts";
 import { disposeRepository, inspectRepository, loadProjectConfig, resolveRepository, selectTarget, snapshotRepository, type RepositoryWorkspace } from "@dsrd/discovery";
 
@@ -27,7 +27,7 @@ export type OnboardingService = {
   inspect(request: Pick<OnboardingRequest, "repository">): Promise<Awaited<ReturnType<typeof inspectRepository>>>;
   prepare(request: OnboardingRequest): Promise<PreparedOnboarding | OnboardingOutcome>;
   search(request: OnboardingRequest): Promise<OnboardingOutcome>;
-  replay(artifact: FailureArtifactV3): Promise<ReplayResult>;
+  replay(artifact: FailureArtifact): Promise<ReplayResult>;
 };
 
 export type SharedDiscoveryOptions = {

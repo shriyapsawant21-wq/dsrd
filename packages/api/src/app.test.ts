@@ -11,6 +11,31 @@ it("rejects a non-Compose upload", async () => {
   expect((await request(app).post("/api/runs").attach("composeFile", Buffer.from("x"), "logs.txt")).status).toBe(400);
 });
 
+it("inspects a repository input through the injected onboarding operation", async () => {
+  const store = new RunStore();
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    inspect: async (repository) => ({ snapshotId: "snapshot-1", candidates: [], suggestions: [], truncated: false, diagnostics: [{ code: "checked", message: repository.kind }] }),
+  });
+
+  const response = await request(app).post("/api/repositories/inspect").send({ repository: { kind: "checkout", path: "/project" } });
+
+  expect(response.status).toBe(200);
+  expect(response.body).toMatchObject({ status: "inspected", inspection: { diagnostics: [{ message: "checkout" }] } });
+});
+
+it("replays a validated artifact through the injected shared replay operation", async () => {
+  const store = new RunStore();
+  const artifact: FailureArtifact = { version: 2, createdAt: new Date(0).toISOString(), target: { platform: "compose", composeFile: "compose.yaml" }, originalSchedule: { id: "original", perturbations: [] }, minimizedSchedule: { id: "minimal", perturbations: [] }, events: [] };
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    replay: async (received) => ({ status: "reproduced", result: { scheduleId: received.minimizedSchedule.id, status: "workload_failure", events: [], logs: [] } }),
+  });
+
+  const response = await request(app).post("/api/replay").send({ artifact });
+
+  expect(response.status).toBe(200);
+  expect(response.body).toMatchObject({ status: "reproduced", result: { scheduleId: "minimal" } });
+});
+
 it("returns an uploaded run and reports that an unfinished artifact is unavailable", async () => {
   const store = new RunStore();
   const app = createApp(store, new RunService(store, async () => new Promise(() => undefined)));

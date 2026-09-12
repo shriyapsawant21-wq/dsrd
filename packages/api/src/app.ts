@@ -3,7 +3,12 @@ import multer from "multer";
 import { RunService } from "./run-service.js";
 import { RunStore } from "./run-store.js";
 import { materializeProject } from "./project-upload.js";
-import type { FailureArtifact } from "@dsrd/contracts";
+import { failureArtifactSchema, repositoryInputSchema, type FailureArtifact, type InspectionResult, type RepositoryInput, type RunResult } from "@dsrd/contracts";
+
+export type ApiOnboardingOperations = {
+  inspect?: (repository: RepositoryInput) => Promise<InspectionResult>;
+  replay?: (artifact: FailureArtifact) => Promise<{ status: "reproduced" | "not_reproduced"; result: RunResult }>;
+};
 
 function summarizeFailures(artifact?: FailureArtifact) {
   if (!artifact) return [];
@@ -12,8 +17,27 @@ function summarizeFailures(artifact?: FailureArtifact) {
 }
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2_000_000, files: 200 } });
-export function createApp(store: RunStore, service: RunService) {
+export function createApp(store: RunStore, service: RunService, onboarding: ApiOnboardingOperations = {}) {
   const app = express();
+  app.use(express.json({ limit: "1mb" }));
+  app.post("/api/repositories/inspect", async (req, res) => {
+    if (onboarding.inspect === undefined) return res.status(501).json({ error: "Repository inspection is not configured" });
+    try {
+      const inspection = await onboarding.inspect(repositoryInputSchema.parse(req.body?.repository));
+      return res.status(200).json({ status: "inspected", inspection });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid repository input" });
+    }
+  });
+  app.post("/api/replay", async (req, res) => {
+    if (onboarding.replay === undefined) return res.status(501).json({ error: "Replay is not configured" });
+    try {
+      const result = await onboarding.replay(failureArtifactSchema.parse(req.body?.artifact));
+      return res.status(200).json(result);
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid replay artifact" });
+    }
+  });
   app.post("/api/runs", upload.array("projectFiles", 200), async (req, res) => {
     try {
       if (!Array.isArray(req.files) || req.files.length === 0) {
