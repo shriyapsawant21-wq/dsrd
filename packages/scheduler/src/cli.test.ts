@@ -7,6 +7,7 @@ import type { ExecutionPlatform, RunResult, Schedule, TargetConfig, Workload } f
 import { loadFailureArtifact } from "./artifact.js";
 import { resolveTargetPath, runCli } from "./cli.js";
 import { fakePlatform } from "./fake-platform.js";
+import { runSharedDiscovery } from "./onboarding.js";
 
 const directories: string[] = [];
 
@@ -39,6 +40,24 @@ afterEach(async () => {
 });
 
 describe("race-debugger CLI", () => {
+  it("delegates scriptable searches to the shared discovery service", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-shared-"));
+    directories.push(directory);
+    await writeFile(join(directory, "manifest.json"), "{}\n");
+    let calls = 0;
+
+    await runCli(["search", "--target", directory, "--output", join(directory, "failure.json")], {
+      platform: fakePlatform,
+      log: () => undefined,
+      sharedDiscovery: async (options) => {
+        calls += 1;
+        return runSharedDiscovery(options);
+      },
+    });
+
+    expect(calls).toBe(1);
+  });
+
   it("resolves a Compose project directory to its conventional compose file", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-project-"));
     directories.push(directory);

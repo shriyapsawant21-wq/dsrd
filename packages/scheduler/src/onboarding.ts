@@ -2,12 +2,13 @@ import { createHash } from "node:crypto";
 import { access, constants } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import type { ExecutionPlatform, FailureArtifactV3, RepositoryInput, RunDiagnostic, TargetCandidate, TargetConfig } from "@dsrd/contracts";
+import type { ExecutionPlatform, FailureArtifactV3, RepositoryInput, RunDiagnostic, Schedule, TargetCandidate, TargetConfig } from "@dsrd/contracts";
 import { defaultExperimentPolicy } from "@dsrd/contracts";
 import { disposeRepository, inspectRepository, loadProjectConfig, resolveRepository, selectTarget, snapshotRepository, type RepositoryWorkspace } from "@dsrd/discovery";
 
-import { generateCandidates } from "./candidates.js";
+import { generateCandidates, type CandidateStage } from "./candidates.js";
 import { discoverFailure, replayFailure, type DiscoveryResult, type ReplayResult } from "./orchestrator.js";
+import type { RunSchedule } from "./search.js";
 
 export type OnboardingOutcome = DiscoveryResult | {
   status: "needs_configuration" | "unsupported_target" | "execution_error" | "cancelled";
@@ -36,17 +37,22 @@ export type SharedDiscoveryOptions = {
   baselineRuns?: number;
   confirmationRuns?: number;
   maxSchedules?: number;
+  candidates?: readonly Schedule[];
+  candidateStages?: readonly CandidateStage[];
+  runSchedule?: RunSchedule;
+  replaySchedule?: RunSchedule;
 };
 
 /** The single direct-target search path used by public CLI/API adapters. */
 export async function runSharedDiscovery(options: SharedDiscoveryOptions): Promise<DiscoveryResult> {
   const workloads = await options.platform.discover(options.target);
   return discoverFailure({
-    candidates: generateCandidates(workloads, options.delayOptionsMs),
+    candidates: options.candidates ?? generateCandidates(workloads, options.delayOptionsMs),
+    candidateStages: options.candidateStages,
     delayOptionsMs: options.delayOptionsMs,
     target: options.target,
-    runSchedule: options.platform.run.bind(options.platform),
-    replaySchedule: options.platform.replay.bind(options.platform),
+    runSchedule: options.runSchedule ?? options.platform.run.bind(options.platform),
+    replaySchedule: options.replaySchedule ?? options.platform.replay.bind(options.platform),
     maxSchedules: options.maxSchedules,
     baselineRuns: options.baselineRuns,
     confirmationRuns: options.confirmationRuns,

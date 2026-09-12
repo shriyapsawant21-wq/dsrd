@@ -6,6 +6,7 @@ import { loadFailureArtifact, saveFailureArtifact } from "./artifact.js";
 import { generateAdaptiveCandidateStages, generateFocusedCandidates } from "./candidates.js";
 import { fakePlatform } from "./fake-platform.js";
 import { discoverFailure, replayFailure } from "./orchestrator.js";
+import { runSharedDiscovery, type SharedDiscoveryOptions } from "./onboarding.js";
 import { chooseMenuAction, createReadlinePrompt, type PromptAdapter } from "./prompt.js";
 import { renderDashboard, renderReplaySummary, renderResultSummary } from "./presentation.js";
 import type { ExecutionPlatform, TargetConfig } from "@dsrd/contracts";
@@ -16,6 +17,7 @@ const quickDelayOptionsMs = [0, 2500];
 export type CliDependencies = {
   platform: ExecutionPlatform;
   log: (message: string) => void;
+  sharedDiscovery?: (options: SharedDiscoveryOptions) => ReturnType<typeof runSharedDiscovery>;
   interactive?: boolean;
   useColor?: boolean;
   prompt?: PromptAdapter;
@@ -114,11 +116,12 @@ export async function runCli(
         ? `Starting quick scan (${Math.min(maxRuns ?? candidateMaximum, candidateMaximum)} schedules maximum).`
         : `Starting adaptive thorough scan (${Math.min(maxRuns ?? candidateMaximum, candidateMaximum)} schedules maximum).`);
       dependencies.log("");
-      const result = await discoverFailure({
-        candidates,
-        candidateStages,
+      const result = await (dependencies.sharedDiscovery ?? runSharedDiscovery)({
+        platform: dependencies.platform,
         delayOptionsMs,
         target,
+        candidates,
+        candidateStages,
         runSchedule: runWithProgress,
         replaySchedule,
         maxSchedules: maxRuns,
