@@ -19,12 +19,20 @@ export type LocalProcessEvent = {
   detail?: string;
 };
 
+export type LocalProcessReadiness = {
+  workload: string;
+  kind: "http" | "tcp" | "process" | "custom";
+  status: "ready" | "timeout" | "unhealthy";
+  observedAtMs: number;
+  detail?: string;
+};
+
 export type LocalProcessObservation = {
   scheduleId: string;
   startedAtMs: number;
   workloads: Workload[];
   states: LocalProcessState[];
-  readiness: [];
+  readiness: LocalProcessReadiness[];
   workloadEvents: LocalProcessEvent[];
   logs: string[];
 };
@@ -106,12 +114,22 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
     }));
     const timeoutMs = this.options.runTimeoutMs ?? 5_000;
     await withTimeout(Promise.all(completions).then(() => undefined), timeoutMs, schedule.id);
+    const readiness = manifest.workloads.flatMap((workload): LocalProcessReadiness[] => {
+      if (workload.readiness?.type !== "process") return [];
+      const state = states.get(workload.id);
+      return [{
+        workload: workload.id,
+        kind: "process",
+        status: state?.state === "running" ? "ready" : "unhealthy",
+        observedAtMs: Date.now(),
+      }];
+    });
     const result = await this.options.observer.evaluate({
       scheduleId: schedule.id,
       startedAtMs,
       workloads: manifest.workloads.map(toWorkload),
       states: manifest.workloads.map((workload) => states.get(workload.id) ?? ({ workload: workload.id, state: "missing", observedAtMs: Date.now() })),
-      readiness: [],
+      readiness,
       workloadEvents: events,
       logs,
     });

@@ -118,4 +118,34 @@ describe("LocalProcessExecutionPlatform", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("reports declared process readiness to the proof observer", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-local-readiness-"));
+    const manifest = join(directory, "manifest.json");
+    await writeFile(manifest, JSON.stringify({
+      workloads: [
+        { id: "server", kind: "process", perturbablePhases: [], readiness: { type: "process" }, command: [process.execPath, "-e", "setInterval(() => {}, 1000)"] },
+        { id: "gate", kind: "job", perturbablePhases: [], command: [process.execPath, "-e", "setTimeout(() => process.exit(0), 100)"] },
+      ],
+    }));
+    const observations: LocalProcessObservation[] = [];
+    try {
+      const platform = new LocalProcessExecutionPlatform({
+        observer: { evaluate: async (snapshot) => {
+          observations.push(snapshot);
+          return { scheduleId: snapshot.scheduleId, status: "healthy", events: [], logs: [] };
+        },
+        },
+      });
+      await platform.run({ platform: "local-process", manifestPath: manifest }, { id: "process-ready", perturbations: [] });
+
+      expect(observations[0]?.readiness).toContainEqual(expect.objectContaining({
+        workload: "server",
+        kind: "process",
+        status: "ready",
+      }));
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 });
