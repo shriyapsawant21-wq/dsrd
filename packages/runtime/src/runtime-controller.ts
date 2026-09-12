@@ -71,6 +71,10 @@ export class DockerRuntimeController {
     let runFailure: unknown;
     const observationAbort = new AbortController();
     const operations: ComposeOperationTracker = { inFlight: new Set() };
+    // Image preparation and reset establish a fresh owned attempt outside the
+    // startup/readiness measurement window.
+    await this.options.compose.prepare(observationAbort.signal);
+    await this.options.compose.resetStack();
     const execution = this.executeSchedule(
       schedule,
       serviceOrder,
@@ -135,8 +139,6 @@ export class DockerRuntimeController {
     operations: ComposeOperationTracker,
   ): Promise<RunResult> {
     const startedAtMs = Date.now();
-    await this.options.compose.prepare(signal);
-    await this.options.compose.resetStack();
     for (const perturbation of schedule.perturbations) {
       if (perturbation.phase === "ready") {
         await this.options.readinessDelay?.apply(perturbation.workloadId, perturbation.delayMs);

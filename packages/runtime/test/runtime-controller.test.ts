@@ -65,6 +65,13 @@ class RecordingCompose implements ComposeRuntime {
   }
 }
 
+class SlowResetCompose extends RecordingCompose {
+  override async resetStack(): Promise<void> {
+    this.actions.push("reset");
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 class RecordingDelay implements Delay {
   constructor(private readonly actions: string[]) {}
 
@@ -725,6 +732,18 @@ describe("DockerRuntimeController", () => {
     await assertion;
     expect(compose.actions.at(-1)).toBe("stop");
     vi.useRealTimers();
+  });
+
+  it("starts the measured timeout only after reset preparation finishes", async () => {
+    const compose = new SlowResetCompose();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer: new RecordingObserver(),
+      runTimeoutMs: 5,
+    });
+
+    await expect(controller.runSchedule({ id: "prepared", perturbations: [] }, ["api"])).resolves.toMatchObject({ status: "pass" });
   });
 
   it("aborts observer work before cleanup when the run times out", async () => {
