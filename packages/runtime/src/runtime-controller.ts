@@ -71,23 +71,28 @@ export class DockerRuntimeController {
     let runFailure: unknown;
     const observationAbort = new AbortController();
     const operations: ComposeOperationTracker = { inFlight: new Set() };
-    // Image preparation and reset establish a fresh owned attempt outside the
-    // startup/readiness measurement window.
-    await this.options.compose.prepare(observationAbort.signal);
-    await this.options.compose.resetStack();
-    const execution = this.executeSchedule(
-      schedule,
-      serviceOrder,
-      observationAbort.signal,
-      operations,
-    );
     try {
-      result = await this.withTimeout(
-        execution,
-        schedule.id,
-        timeoutMs,
-        () => observationAbort.abort(),
+      // Image preparation and reset establish a fresh owned attempt outside
+      // the startup/readiness measurement window, but remain inside the
+      // classified cleanup boundary.
+      await this.options.compose.prepare(observationAbort.signal);
+      await this.options.compose.resetStack();
+      const execution = this.executeSchedule(
+        schedule,
+        serviceOrder,
+        observationAbort.signal,
+        operations,
       );
+      try {
+        result = await this.withTimeout(
+          execution,
+          schedule.id,
+          timeoutMs,
+          () => observationAbort.abort(),
+        );
+      } catch (error) {
+        runFailure = error;
+      }
     } catch (error) {
       runFailure = error;
     }

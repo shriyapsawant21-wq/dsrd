@@ -21,11 +21,13 @@ const passingResult: RunResult = {
 
 class RecordingCompose implements ComposeRuntime {
   readonly actions: string[] = [];
+  failPrepare = false;
   failStartFor?: string;
   failStop = false;
 
   async prepare(): Promise<void> {
     this.actions.push("prepare");
+    if (this.failPrepare) throw new Error("host port 5432 is already allocated");
   }
 
   async resetStack(): Promise<void> {
@@ -263,6 +265,25 @@ const schedule: Schedule = {
 };
 
 describe("DockerRuntimeController", () => {
+  it("classifies preparation failure and cleans only the current Compose attempt", async () => {
+    const compose = new RecordingCompose();
+    compose.failPrepare = true;
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer: new RecordingObserver(),
+    });
+
+    await expect(controller.runSchedule({ id: "prepare-failed", perturbations: [] }, ["api"])).resolves.toEqual({
+      scheduleId: "prepare-failed",
+      status: "execution_error",
+      events: [],
+      logs: [],
+      diagnostics: [{ code: "runtime_operation_failed", message: "host port 5432 is already allocated" }],
+    });
+    expect(compose.actions).toEqual(["prepare", "stop"]);
+  });
+
   it("classifies a failed Compose operation as an execution error and cleans its stack", async () => {
     const compose = new RecordingCompose();
     compose.failStartFor = "api";
