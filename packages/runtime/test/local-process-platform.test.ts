@@ -97,4 +97,25 @@ describe("LocalProcessExecutionPlatform", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("classifies a timed-out process attempt and cleans it up", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-local-timeout-"));
+    const pidFile = join(directory, "process.pid");
+    const manifest = join(directory, "manifest.json");
+    const script = "require('node:fs').writeFileSync(process.env.DSRD_CHILD_PID_FILE, String(process.pid)); setInterval(() => {}, 1000);";
+    await writeFile(manifest, JSON.stringify({
+      workloads: [{ id: "hang", kind: "job", perturbablePhases: [], command: [process.execPath, "-e", script], environment: { DSRD_CHILD_PID_FILE: pidFile } }],
+    }));
+    try {
+      const platform = new LocalProcessExecutionPlatform({ observer, runTimeoutMs: 100 });
+      await expect(platform.run({ platform: "local-process", manifestPath: manifest }, { id: "timeout", perturbations: [] })).resolves.toMatchObject({
+        status: "execution_error",
+        diagnostics: [{ code: "local_process_execution_error" }],
+      });
+      const pid = Number(await readFile(pidFile, "utf8"));
+      expect(() => process.kill(pid, 0)).toThrow();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 });

@@ -57,8 +57,23 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
   async run(target: TargetConfig, schedule: Schedule): Promise<RunResult> {
     const manifest = await this.manifestFor(target);
     this.validateSchedule(schedule, manifest.workloads);
-    await this.reset(target);
-    return this.execute(manifest, schedule);
+    try {
+      await this.reset(target);
+      return await this.execute(manifest, schedule);
+    } catch (error) {
+      return {
+        scheduleId: schedule.id,
+        status: "execution_error",
+        events: [],
+        logs: [],
+        diagnostics: [{
+          code: "local_process_execution_error",
+          message: error instanceof Error ? error.message : "Local-process execution failed",
+        }],
+      };
+    } finally {
+      await this.stopChildren();
+    }
   }
 
   async replay(target: TargetConfig, schedule: Schedule): Promise<RunResult> {
@@ -100,7 +115,6 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
       workloadEvents: events,
       logs,
     });
-    await this.stopChildren();
     return result;
   }
 
