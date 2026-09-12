@@ -37,7 +37,7 @@ export type DiscoveryResult =
       exploredCandidateSchedules: number;
     }
   | {
-      status: "target_unhealthy" | "execution_error" | "inconclusive";
+      status: "target_unhealthy" | "needs_configuration" | "execution_error" | "inconclusive";
       testedSchedules: number;
       exploredCandidateSchedules: number;
       diagnostics?: RunResult["diagnostics"];
@@ -85,11 +85,7 @@ export async function discoverFailure(
   };
   if (baselineEvidence.status !== "healthy") {
     return {
-      status: baselineEvidence.status === "workload_failure"
-        ? "target_unhealthy"
-        : baselineEvidence.status === "execution_error"
-          ? "execution_error"
-          : "inconclusive",
+      status: terminalStatus(baselineEvidence),
       testedSchedules: executions,
       exploredCandidateSchedules: 0,
       ...(baselineEvidence.diagnostics === undefined ? {} : { diagnostics: baselineEvidence.diagnostics }),
@@ -162,6 +158,13 @@ export async function discoverFailure(
     }
     throw error;
   }
+}
+
+function terminalStatus(result: RunResult): "target_unhealthy" | "needs_configuration" | "execution_error" | "inconclusive" {
+  if (result.status === "workload_failure") return "target_unhealthy";
+  if (result.diagnostics?.some(({ code }) => code === "local_process_reset_required")) return "needs_configuration";
+  if (result.status === "execution_error") return "execution_error";
+  return "inconclusive";
 }
 
 async function confirmFailure(

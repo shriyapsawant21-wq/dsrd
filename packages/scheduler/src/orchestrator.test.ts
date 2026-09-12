@@ -23,6 +23,35 @@ describe("orchestration", () => {
     expect(result).toEqual({ status: "target_unhealthy", testedSchedules: 1, exploredCandidateSchedules: 0 });
   });
 
+  it("surfaces explicit local reset configuration errors without publishing an artifact", async () => {
+    const result = await discoverFailure({
+      candidates: [],
+      delayOptionsMs: [0],
+      target,
+      runSchedule: async (_target, schedule) => ({
+        scheduleId: schedule.id,
+        status: "execution_error",
+        events: [],
+        logs: [],
+        diagnostics: [{
+          code: "local_process_reset_required",
+          message: "This local-process target requires an explicit resetCommand before execution",
+        }],
+      }),
+    });
+
+    expect(result).toEqual({
+      status: "needs_configuration",
+      testedSchedules: 1,
+      exploredCandidateSchedules: 0,
+      diagnostics: [{
+        code: "local_process_reset_required",
+        message: "This local-process target requires an explicit resetCommand before execution",
+      }],
+    });
+    expect(result).not.toHaveProperty("artifact");
+  });
+
   it("runs three healthy baselines before exploring candidates by default", async () => {
     const calls: string[] = [];
     await discoverFailure({
