@@ -64,6 +64,26 @@ describe("race-debugger CLI", () => {
     );
   });
 
+  it("validates explicit baseline and confirmation run counts", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-project-"));
+    directories.push(directory);
+    const manifestPath = join(directory, "manifest.json");
+    await writeFile(manifestPath, "{}");
+
+    await expect(runCli([
+      "search", "--platform", "local-process", "--target", manifestPath,
+      "--baseline-runs", "0",
+    ], { platform: fakePlatform, log: () => undefined })).rejects.toThrow(
+      "Baseline runs must be a positive integer",
+    );
+    await expect(runCli([
+      "search", "--platform", "local-process", "--target", manifestPath,
+      "--confirmation-runs", "0",
+    ], { platform: fakePlatform, log: () => undefined })).rejects.toThrow(
+      "Confirmation runs must be a positive integer",
+    );
+  });
+
   it("documents the bare interactive command", async () => {
     const readme = await readFile(join(process.cwd(), "README.md"), "utf8");
 

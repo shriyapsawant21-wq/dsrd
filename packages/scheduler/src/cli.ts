@@ -83,8 +83,10 @@ export async function runCli(
     .option("-d, --delay-options <milliseconds>", "comma-separated delay values")
     .option("--quick", "test one perturbation at a time with a small delay set")
     .option("-n, --max-runs <number>", "maximum physical schedule executions")
+    .option("--baseline-runs <number>", "required consecutive healthy baseline runs")
+    .option("--confirmation-runs <number>", "required matching failure confirmations")
     .option("-o, --output <path>", "artifact output path", "failure.json")
-    .action(async (options: { platform: string; target: string; delayOptions?: string; quick?: boolean; maxRuns?: string; output: string }) => {
+    .action(async (options: { platform: string; target: string; delayOptions?: string; quick?: boolean; maxRuns?: string; baselineRuns?: string; confirmationRuns?: string; output: string }) => {
       const delayOptionsMs = options.delayOptions
         ? parseDelayOptions(options.delayOptions)
         : options.quick ? quickDelayOptionsMs : defaultDelayOptionsMs;
@@ -94,6 +96,8 @@ export async function runCli(
       const candidateStages = options.quick ? undefined : generateAdaptiveCandidateStages(workloads, delayOptionsMs);
       const candidateMaximum = candidates?.length ?? candidateStages?.at(-1)?.candidateCount ?? 0;
       const maxRuns = options.maxRuns === undefined ? undefined : parseMaxRuns(options.maxRuns);
+      const baselineRuns = options.baselineRuns === undefined ? undefined : parseRunCount(options.baselineRuns, "Baseline runs");
+      const confirmationRuns = options.confirmationRuns === undefined ? undefined : parseRunCount(options.confirmationRuns, "Confirmation runs");
       let runNumber = 0;
       let failureFound = false;
       const runWithProgress = async (runTarget: TargetConfig, schedule: Parameters<typeof runSchedule>[1]) => {
@@ -117,6 +121,8 @@ export async function runCli(
         target,
         runSchedule: runWithProgress,
         maxSchedules: maxRuns,
+        baselineRuns,
+        confirmationRuns,
       });
 
       if (result.status !== "found_failure") {
@@ -289,6 +295,14 @@ function parseMaxRuns(input: string): number {
   const value = Number(input);
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new Error("Maximum runs must be a positive integer");
+  }
+  return value;
+}
+
+function parseRunCount(input: string, label: string): number {
+  const value = Number(input);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`${label} must be a positive integer`);
   }
   return value;
 }
