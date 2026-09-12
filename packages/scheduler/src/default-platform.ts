@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 
 import type { ExecutionPlatform, Schedule, TargetConfig, Workload } from "@dsrd/contracts";
@@ -90,8 +91,13 @@ function createComposePlatform(target: Extract<TargetConfig, { platform: "compos
   let workloads: Workload[] = [];
   const platform = new ComposeExecutionPlatform({
     discovery: new DockerComposeServiceDiscovery({ projectDirectory, runner }),
-    executorFor: () => new DockerRuntimeController({
-      compose: new DockerComposeClient({ projectDirectory, composeFile, runner }),
+    executorFor: (_target, attemptId = "reset") => new DockerRuntimeController({
+      compose: new DockerComposeClient({
+        projectDirectory,
+        composeFile,
+        projectName: composeProjectName(composeFile, attemptId),
+        runner,
+      }),
       delay: new SystemDelay(),
       observer: new ComposeProofObserver(() => workloads),
     }),
@@ -104,4 +110,9 @@ function createComposePlatform(target: Extract<TargetConfig, { platform: "compos
     run: async (_target: TargetConfig, schedule: Schedule) => { await prime(); return platform.run(normalizedTarget, schedule); },
     replay: async (_target: TargetConfig, schedule: Schedule) => { await prime(); return platform.replay(normalizedTarget, schedule); },
   };
+}
+
+function composeProjectName(composeFile: string, attemptId: string): string {
+  const digest = createHash("sha256").update(`${composeFile}\0${attemptId}`).digest("hex").slice(0, 20);
+  return `dsrd-${digest}`;
 }

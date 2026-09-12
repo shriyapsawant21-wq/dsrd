@@ -117,15 +117,15 @@ interface ComposeRuntime {
 }
 ```
 
-- [ ] Add a client test expecting `docker compose config --quiet`, then image acquisition/build commands during `prepare`, before any `up` command.
-- [ ] Run it and confirm `prepare` is absent.
-- [ ] Implement `prepare()` with a separate signal and make measured starts use `--no-build` and `--pull never`; record the Compose project name in every command.
-- [ ] Add a controller test where a start, observer, timeout, or cleanup action fails and assert the returned `execution_error` contains a diagnostic and the exact owned stack is stopped.
-- [ ] Run it and confirm current behavior rejects/throws instead of returning a classified result.
-- [ ] Convert operational errors, command timeouts, and cleanup failures to `execution_error`; leave invalid API schedule validation as programmer errors. Clear injected readiness delays and stop the stack in every outcome.
-- [ ] Add tests proving an empty schedule preserves Compose dependency handling and a requested delay is recorded with scheduled and actual-start events.
-- [ ] Run focused runtime tests and `npm run typecheck --workspace=@dsrd/runtime`.
-- [ ] Commit `feat(runtime): prepare and isolate compose attempts`.
+- [x] Add a client test expecting `docker compose config --quiet`, then image acquisition/build commands during `prepare`, before any `up` command.
+- [x] Run it and confirm `prepare` is absent.
+- [x] Implement `prepare()` with a separate signal and make measured starts use `--no-build` and `--pull never`; record the Compose project name in every command.
+- [x] Add a controller test where a start, observer, timeout, or cleanup action fails and assert the returned `execution_error` contains a diagnostic and the exact owned stack is stopped.
+- [x] Run it and confirm current behavior rejects/throws instead of returning a classified result.
+- [x] Convert operational errors, command timeouts, and cleanup failures to `execution_error`; leave invalid API schedule validation as programmer errors. Clear injected readiness delays and stop the stack in every outcome.
+- [x] Add tests proving an empty schedule preserves Compose dependency handling and a requested delay is recorded with scheduled and actual-start events.
+- [x] Run focused runtime tests and `npm run typecheck --workspace=@dsrd/runtime`.
+- [x] Commit `feat(runtime): prepare and isolate compose attempts`.
 
 ### Task 5: Preserve conditioned workload metadata and validate capabilities
 

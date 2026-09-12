@@ -24,6 +24,10 @@ class RecordingCompose implements ComposeRuntime {
   failStartFor?: string;
   failStop = false;
 
+  async prepare(): Promise<void> {
+    this.actions.push("prepare");
+  }
+
   async resetStack(): Promise<void> {
     this.actions.push("reset");
   }
@@ -32,6 +36,14 @@ class RecordingCompose implements ComposeRuntime {
     this.actions.push(`start:${service}`);
     if (service === this.failStartFor) {
       throw new Error(`cannot start ${service}`);
+    }
+  }
+
+  async startServices(services: string[]): Promise<void> {
+    this.actions.push(`start-all:${services.join(",")}`);
+    const failedService = services.find((service) => service === this.failStartFor);
+    if (failedService !== undefined) {
+      throw new Error(`cannot start ${failedService}`);
     }
   }
 
@@ -93,6 +105,10 @@ class BlockingStartCompose extends RecordingCompose {
       });
       this.actions.push(`started:${service}`);
     }
+  }
+
+  override async startServices(services: string[]): Promise<void> {
+    for (const service of services) await this.startService(service);
   }
 
   waitForStart(): Promise<void> {
@@ -179,6 +195,10 @@ class AbortableStartCompose extends RecordingCompose {
       signal.addEventListener("abort", () => reject(signal.reason), { once: true });
     });
   }
+
+  override async startServices(services: string[], options?: { signal?: AbortSignal }): Promise<void> {
+    for (const service of services) await this.startService(service, options);
+  }
 }
 
 class RecordingObserver implements RunObserver {
@@ -236,6 +256,25 @@ const schedule: Schedule = {
 };
 
 describe("DockerRuntimeController", () => {
+  it("classifies a failed Compose operation as an execution error and cleans its stack", async () => {
+    const compose = new RecordingCompose();
+    compose.failStartFor = "api";
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer: new RecordingObserver(),
+    });
+
+    await expect(controller.runSchedule({ id: "broken-start", perturbations: [] }, ["api"])).resolves.toEqual({
+      scheduleId: "broken-start",
+      status: "execution_error",
+      events: [],
+      logs: [],
+      diagnostics: [{ code: "runtime_operation_failed", message: "cannot start api" }],
+    });
+    expect(compose.actions).toEqual(["prepare", "reset", "start-all:api", "stop"]);
+  });
+
   it("resets, starts services in schedule order, observes, and cleans up", async () => {
     const compose = new RecordingCompose();
     const delay = new RecordingDelay(compose.actions);
@@ -246,6 +285,7 @@ describe("DockerRuntimeController", () => {
 
     expect(result).toEqual(passingResult);
     expect(compose.actions).toEqual([
+      "prepare",
       "reset",
       "wait:100",
       "wait:0",
@@ -262,6 +302,12 @@ describe("DockerRuntimeController", () => {
       logs: [],
       services: [],
     });
+    expect(observer.snapshot?.events).toEqual(expect.arrayContaining([
+      { timeMs: 0, service: "postgres", event: "scheduled_start_delay", detail: "100ms" },
+      { timeMs: 0, service: "worker", event: "scheduled_start_delay", detail: "25ms" },
+      expect.objectContaining({ service: "postgres", event: "actual_service_start" }),
+      expect.objectContaining({ service: "worker", event: "actual_service_start" }),
+    ]));
     expect(observer.snapshot?.refresh).toBeTypeOf("function");
   });
 
@@ -306,11 +352,12 @@ describe("DockerRuntimeController", () => {
     await vi.waitFor(() => {
       expect(compose.actions).toContain("start:api");
     });
-    expect(compose.actions).toEqual(["reset", "gate:postgres", "wait:0", "start:api"]);
+    expect(compose.actions).toEqual(["prepare", "reset", "gate:postgres", "wait:0", "start:api"]);
 
     gate.release();
     await run;
     expect(compose.actions).toEqual([
+      "prepare",
       "reset",
       "gate:postgres",
       "wait:0",
@@ -336,7 +383,10 @@ describe("DockerRuntimeController", () => {
     await expect(controller.runSchedule({
       id: "failed-api-before-postgres",
       perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
-    }, ["api", "postgres"])).rejects.toThrow("cannot start api");
+    }, ["api", "postgres"])).resolves.toMatchObject({
+      status: "execution_error",
+      diagnostics: [{ code: "runtime_operation_failed", message: "cannot start api" }],
+    });
 
     delay.release();
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -357,7 +407,10 @@ describe("DockerRuntimeController", () => {
     await expect(controller.runSchedule({
       id: "timed-out-before-postgres",
       perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
-    }, ["postgres"])).rejects.toBeInstanceOf(RunTimeoutError);
+    }, ["postgres"])).resolves.toMatchObject({
+      status: "execution_error",
+      diagnostics: [{ code: "run_timeout" }],
+    });
 
     delay.release();
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -387,12 +440,12 @@ describe("DockerRuntimeController", () => {
     } finally {
       compose.releaseStart();
     }
-    await expect(runFailure).resolves.toBeInstanceOf(RunTimeoutError);
+    await expect(runFailure).resolves.toMatchObject({ status: "execution_error", diagnostics: [{ code: "run_timeout" }] });
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    expect(compose.actions).toEqual(["reset", "start:api", "started:api", "stop"]);
+    expect(compose.actions).toEqual(["prepare", "reset", "start:api", "started:api", "stop"]);
   });
 
-  it("skips cleanup when an aborted Compose operation does not settle", async () => {
+  it("reports a drain timeout and still attempts exact-stack cleanup", async () => {
     const compose = new BlockingStartCompose();
     const controller = new DockerRuntimeController({
       compose,
@@ -405,16 +458,15 @@ describe("DockerRuntimeController", () => {
       id: "non-closing-start",
       perturbations: [{ workloadId: "postgres", phase: "start", delayMs: 100 }],
     }, ["api", "postgres"]);
-    const failure = run.catch((error: unknown) => error);
 
     await compose.waitForStart();
     try {
       const outcome = await Promise.race([
-        failure,
+        run,
         new Promise<"still-running">((resolve) => setTimeout(() => resolve("still-running"), 100)),
       ]);
-      expect(outcome).toBeInstanceOf(AggregateError);
-      expect(compose.actions).not.toContain("stop");
+      expect(outcome).toMatchObject({ status: "execution_error", diagnostics: [{ code: "run_timeout" }] });
+      expect(compose.actions).toContain("stop");
     } finally {
       compose.releaseStart();
     }
@@ -433,15 +485,11 @@ describe("DockerRuntimeController", () => {
       id: "timed-out-before-observation",
       perturbations: [],
     }, ["api"]);
-    const runFailure = run.then(
-      () => undefined,
-      (error: unknown) => error,
-    );
 
     await compose.waitForStart();
     await new Promise<void>((resolve) => setTimeout(resolve, 20));
     compose.releaseStart();
-    await expect(runFailure).resolves.toBeInstanceOf(RunTimeoutError);
+    await expect(run).resolves.toMatchObject({ status: "execution_error", diagnostics: [{ code: "run_timeout" }] });
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     expect(compose.actions).not.toContain("logs");
@@ -462,16 +510,12 @@ describe("DockerRuntimeController", () => {
       id: "timed-out-during-log-collection",
       perturbations: [],
     }, ["api"]);
-    const runFailure = run.then(
-      () => undefined,
-      (error: unknown) => error,
-    );
 
     await compose.waitForLogs();
     await new Promise<void>((resolve) => setTimeout(resolve, 20));
     expect(compose.actions).not.toContain("stop");
     compose.releaseLogs();
-    await expect(runFailure).resolves.toBeInstanceOf(RunTimeoutError);
+    await expect(run).resolves.toMatchObject({ status: "execution_error", diagnostics: [{ code: "run_timeout" }] });
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(compose.actions).not.toContain("ps");
     expect(observer.snapshot).toBeUndefined();
@@ -503,8 +547,8 @@ describe("DockerRuntimeController", () => {
       expect(compose.actions).not.toContain("stop");
       compose.release();
       const failure = await runFailure;
-      expect(failure).toBeInstanceOf(RunTimeoutError);
-      expect(compose.actions).toEqual(["reset", "logs", "ps", "logs", "stop"]);
+      expect(failure).toMatchObject({ status: "execution_error", diagnostics: [{ code: "run_timeout" }] });
+      expect(compose.actions).toEqual(["prepare", "reset", "start-all:", "logs", "ps", "logs", "stop"]);
     } finally {
       compose.release();
       vi.useRealTimers();
@@ -528,7 +572,7 @@ describe("DockerRuntimeController", () => {
       new Promise<"still-running">((resolve) => setTimeout(() => resolve("still-running"), 50)),
     ]);
 
-    expect(outcome).toBeInstanceOf(RunTimeoutError);
+    expect(outcome).toMatchObject({ status: "execution_error", diagnostics: [{ code: "run_timeout" }] });
     expect(compose.actions.at(-1)).toBe("stop");
   });
 
@@ -541,7 +585,7 @@ describe("DockerRuntimeController", () => {
       observer: new RecordingObserver()
     });
 
-    await expect(controller.runSchedule(schedule, ["postgres", "api", "worker"])).rejects.toThrow("cannot start api");
+    await expect(controller.runSchedule(schedule, ["postgres", "api", "worker"])).resolves.toMatchObject({ status: "execution_error" });
     expect(compose.actions.at(-1)).toBe("stop");
   });
 
@@ -553,7 +597,7 @@ describe("DockerRuntimeController", () => {
       observer: new RecordingObserver(passingResult, new Error("oracle unavailable"))
     });
 
-    await expect(controller.runSchedule(schedule, ["postgres", "api", "worker"])).rejects.toThrow("oracle unavailable");
+    await expect(controller.runSchedule(schedule, ["postgres", "api", "worker"])).resolves.toMatchObject({ status: "execution_error" });
     expect(compose.actions.at(-1)).toBe("stop");
   });
 
@@ -593,13 +637,12 @@ describe("DockerRuntimeController", () => {
       observer: new RecordingObserver()
     });
 
-    const failure = await controller.runSchedule(schedule, ["postgres", "api", "worker"]).catch((error: unknown) => error);
+    const result = await controller.runSchedule(schedule, ["postgres", "api", "worker"]);
 
-    expect(failure).toBeInstanceOf(AggregateError);
-    expect((failure as AggregateError).errors).toEqual([
-      expect.objectContaining({ message: "cannot start api" }),
-      expect.objectContaining({ message: "cleanup failed" })
-    ]);
+    expect(result).toMatchObject({
+      status: "execution_error",
+      diagnostics: [{ code: "runtime_operation_failed", message: expect.stringContaining("cleanup also failed") }],
+    });
   });
 
   it("rejects malformed delays before resetting Docker", async () => {
@@ -651,12 +694,10 @@ describe("DockerRuntimeController", () => {
     }, ["postgres", "api"]);
 
     expect(compose.actions).toEqual([
+      "prepare",
       "reset",
       "readiness:postgres:1500",
-      "wait:0",
-      "start:postgres",
-      "wait:0",
-      "start:api",
+      "start-all:postgres,api",
       "logs",
       "ps",
       "readiness:clear",
@@ -678,7 +719,7 @@ describe("DockerRuntimeController", () => {
     });
 
     const run = controller.runSchedule({ id: "stalled", perturbations: [] }, []);
-    const assertion = expect(run).rejects.toThrow("Schedule stalled timed out after 100ms");
+    const assertion = expect(run).resolves.toMatchObject({ status: "execution_error", diagnostics: [{ code: "run_timeout" }] });
     await vi.advanceTimersByTimeAsync(100);
 
     await assertion;
@@ -704,9 +745,7 @@ describe("DockerRuntimeController", () => {
     });
 
     const run = controller.runSchedule({ id: "abort-stalled", perturbations: [] }, []);
-    const assertion = expect(run).rejects.toThrow(
-      "Schedule abort-stalled timed out after 100ms",
-    );
+    const assertion = expect(run).resolves.toMatchObject({ status: "execution_error", diagnostics: [{ code: "run_timeout" }] });
     await vi.advanceTimersByTimeAsync(100);
 
     await assertion;

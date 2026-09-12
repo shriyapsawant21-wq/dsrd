@@ -20,6 +20,26 @@ class RecordingRunner implements CommandRunner {
 }
 
 describe("DockerComposeClient lifecycle", () => {
+  it("preflights configuration and acquires images before a measured start", async () => {
+    const runner = new RecordingRunner();
+    const client = new DockerComposeClient({
+      projectDirectory: "C:/fixture",
+      composeFile: "compose.demo.yml",
+      projectName: "dsrd-attempt-1",
+      runner,
+    });
+
+    await client.prepare();
+    await client.startService("api");
+
+    expect(runner.calls.map(({ args }) => args)).toEqual([
+      ["compose", "-p", "dsrd-attempt-1", "-f", "compose.demo.yml", "config", "--quiet"],
+      ["compose", "-p", "dsrd-attempt-1", "-f", "compose.demo.yml", "pull", "--ignore-buildable"],
+      ["compose", "-p", "dsrd-attempt-1", "-f", "compose.demo.yml", "build"],
+      ["compose", "-p", "dsrd-attempt-1", "-f", "compose.demo.yml", "up", "-d", "--no-build", "--pull", "never", "api"],
+    ]);
+  });
+
   it("stops the stack without deleting volumes", async () => {
     const runner = new RecordingRunner();
     const client = new DockerComposeClient({ projectDirectory: "C:/fixture", runner });
@@ -74,7 +94,20 @@ describe("DockerComposeClient lifecycle", () => {
 
     await client.startService("api");
 
-    expect(runner.calls[0]?.args).toEqual(["compose", "up", "-d", "api"]);
+    expect(runner.calls[0]?.args).toEqual([
+      "compose", "up", "-d", "--no-build", "--pull", "never", "api"
+    ]);
+  });
+
+  it("starts an unperturbed workload set in one Compose invocation", async () => {
+    const runner = new RecordingRunner();
+    const client = new DockerComposeClient({ projectDirectory: "C:/fixture", runner });
+
+    await client.startServices(["postgres", "api"]);
+
+    expect(runner.calls[0]?.args).toEqual([
+      "compose", "up", "-d", "--no-build", "--pull", "never", "postgres", "api"
+    ]);
   });
 
   it("starts a controlled service without auto-starting its dependencies", async () => {
@@ -83,7 +116,9 @@ describe("DockerComposeClient lifecycle", () => {
 
     await client.startService("api", { includeDependencies: false });
 
-    expect(runner.calls[0]?.args).toEqual(["compose", "up", "-d", "--no-deps", "api"]);
+    expect(runner.calls[0]?.args).toEqual([
+      "compose", "up", "-d", "--no-build", "--pull", "never", "--no-deps", "api"
+    ]);
   });
 
   it("forwards a start cancellation signal to the command runner", async () => {

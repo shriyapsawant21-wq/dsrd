@@ -11,9 +11,13 @@ describe("runtime replay", () => {
   it("executes the provided schedule through the ordinary runtime path", async () => {
     const starts: string[] = [];
     const compose: ComposeRuntime = {
+      prepare: async () => undefined,
       resetStack: async () => undefined,
       startService: async (service) => {
         starts.push(service);
+      },
+      startServices: async (services) => {
+        starts.push(...services);
       },
       collectLogs: async () => ["api | failed"],
       listServices: async () => [{ service: "api", state: "exited", exitCode: 1 }],

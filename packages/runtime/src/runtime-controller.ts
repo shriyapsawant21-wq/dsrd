@@ -1,4 +1,4 @@
-import type { RunResult, Schedule } from "@dsrd/contracts";
+import type { RunResult, Schedule, TimelineEvent } from "@dsrd/contracts";
 
 import type { Delay } from "./delay.js";
 import { validateDelayMs } from "./delay.js";
@@ -11,11 +11,13 @@ import type { ReadinessDelayAdapter } from "./readiness-delay.js";
 import type { StartDelayGate } from "./start-delay-gate.js";
 
 export interface ComposeRuntime {
-  resetStack(): Promise<void>;
+  prepare(signal?: AbortSignal): Promise<void>;
+  resetStack(signal?: AbortSignal): Promise<void>;
   startService(
     service: string,
     options?: { includeDependencies?: boolean; signal?: AbortSignal },
   ): Promise<void>;
+  startServices(services: string[], options?: { signal?: AbortSignal }): Promise<void>;
   collectLogs(signal?: AbortSignal): Promise<string[]>;
   listServices(signal?: AbortSignal): Promise<ComposeServiceState[]>;
   stopStack(): Promise<void>;
@@ -89,29 +91,27 @@ export class DockerRuntimeController {
     try {
       await this.drainComposeOperations(operations, schedule.id, operationDrainTimeoutMs);
     } catch (drainFailure) {
-      if (runFailure !== undefined) {
-        throw new AggregateError(
+      runFailure = runFailure === undefined
+        ? drainFailure
+        : new AggregateError(
           [runFailure, drainFailure],
           `Schedule ${schedule.id} failed and Compose cleanup was skipped`,
         );
-      }
-      throw drainFailure;
     }
 
     try {
       await this.cleanup();
     } catch (cleanupFailure) {
-      if (runFailure !== undefined) {
-        throw new AggregateError(
+      runFailure = runFailure === undefined
+        ? cleanupFailure
+        : new AggregateError(
           [runFailure, cleanupFailure],
           `Schedule ${schedule.id} failed and cleanup also failed`
         );
-      }
-      throw cleanupFailure;
     }
 
     if (runFailure !== undefined) {
-      throw runFailure;
+      return this.executionError(schedule.id, runFailure);
     }
     return result as RunResult;
   }
@@ -135,6 +135,7 @@ export class DockerRuntimeController {
     operations: ComposeOperationTracker,
   ): Promise<RunResult> {
     const startedAtMs = Date.now();
+    await this.options.compose.prepare(signal);
     await this.options.compose.resetStack();
     for (const perturbation of schedule.perturbations) {
       if (perturbation.phase === "ready") {
@@ -148,23 +149,19 @@ export class DockerRuntimeController {
     );
     const independentlyScheduled = [...startDelays.values()].some((delayMs) => delayMs > 0);
     signal.throwIfAborted();
+    const actualStartEvents: TimelineEvent[] = [];
     if (independentlyScheduled) {
       const starts = this.trackComposeOperation(
         operations,
-        this.startIndependently(serviceOrder, startDelays, signal),
+        this.startIndependently(serviceOrder, startDelays, startedAtMs, signal),
       );
-      await starts;
+      actualStartEvents.push(...await starts);
     } else {
-      for (const service of serviceOrder) {
-        signal.throwIfAborted();
-        await this.options.delay.wait(0);
-        signal.throwIfAborted();
-        const start = this.trackComposeOperation(
-          operations,
-          this.options.compose.startService(service, { signal }),
-        );
-        await start;
-      }
+      const start = this.trackComposeOperation(
+        operations,
+        this.options.compose.startServices(serviceOrder, { signal }),
+      );
+      await start;
     }
 
     signal.throwIfAborted();
@@ -179,19 +176,20 @@ export class DockerRuntimeController {
     );
     signal.throwIfAborted();
 
+    const scheduledStartEvents: TimelineEvent[] = schedule.perturbations
+      .filter((perturbation) => perturbation.phase === "start" && perturbation.delayMs > 0)
+      .map((perturbation) => ({
+        timeMs: 0,
+        service: perturbation.workloadId,
+        event: "scheduled_start_delay",
+        detail: `${perturbation.delayMs}ms`,
+      }));
     const snapshot: ObservationSnapshot = {
       scheduleId: schedule.id,
       startedAtMs,
       logs,
       services,
-      events: schedule.perturbations
-        .filter((perturbation) => perturbation.phase === "start" && perturbation.delayMs > 0)
-        .map((perturbation) => ({
-          timeMs: 0,
-          service: perturbation.workloadId,
-          event: "scheduled_start_delay",
-          detail: `${perturbation.delayMs}ms`,
-        })),
+      events: scheduledStartEvents.concat(actualStartEvents),
       signal,
       refresh: async () => {
         signal.throwIfAborted();
@@ -244,8 +242,9 @@ export class DockerRuntimeController {
   private async startIndependently(
     serviceOrder: string[],
     startDelays: ReadonlyMap<string, number>,
+    startedAtMs: number,
     signal: AbortSignal,
-  ): Promise<void> {
+  ): Promise<TimelineEvent[]> {
     const cancellation = new AbortController();
     const cancelForRunAbort = () => cancellation.abort(signal.reason);
     if (signal.aborted) {
@@ -253,7 +252,7 @@ export class DockerRuntimeController {
     } else {
       signal.addEventListener("abort", cancelForRunAbort, { once: true });
     }
-    const starts = serviceOrder.map(async (service) => {
+    const starts = serviceOrder.map(async (service): Promise<TimelineEvent | undefined> => {
       const delayMs = startDelays.get(service) ?? 0;
       if (delayMs > 0 && this.options.startDelayGate !== undefined) {
         await this.options.startDelayGate.wait(service, cancellation.signal);
@@ -264,10 +263,18 @@ export class DockerRuntimeController {
         includeDependencies: false,
         signal: cancellation.signal,
       });
+      return delayMs > 0
+        ? {
+          timeMs: Math.max(0, Date.now() - startedAtMs),
+          service,
+          event: "actual_service_start",
+          detail: `${delayMs}ms requested`,
+        }
+        : undefined;
     });
 
     try {
-      await Promise.all(starts);
+      return (await Promise.all(starts)).filter((event): event is TimelineEvent => event !== undefined);
     } catch (error) {
       cancellation.abort(error);
       await Promise.allSettled(starts);
@@ -339,6 +346,23 @@ export class DockerRuntimeController {
     if (failures.length > 1) {
       throw new AggregateError(failures, "Multiple runtime cleanup operations failed");
     }
+  }
+
+  private executionError(scheduleId: string, error: unknown): RunResult {
+    const message = error instanceof Error ? error.message : String(error);
+    const errors = error instanceof AggregateError ? error.errors : [error];
+    const code = errors.some((failure) => failure instanceof RunTimeoutError)
+      ? "run_timeout"
+      : errors.some((failure) => failure instanceof ComposeOperationDrainTimeoutError)
+        ? "compose_operation_drain_timeout"
+        : "runtime_operation_failed";
+    return {
+      scheduleId,
+      status: "execution_error",
+      events: [],
+      logs: [],
+      diagnostics: [{ code, message }],
+    };
   }
 
   private validateSchedule(schedule: Schedule, serviceOrder: string[]): void {

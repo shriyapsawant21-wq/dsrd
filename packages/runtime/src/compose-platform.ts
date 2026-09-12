@@ -97,7 +97,10 @@ export interface ComposeScheduleExecutor {
 
 export type ComposeExecutionPlatformOptions = {
   discovery: ComposeServiceDiscovery;
-  executorFor(target: Extract<TargetConfig, { platform: "compose" }>): ComposeScheduleExecutor;
+  executorFor(
+    target: Extract<TargetConfig, { platform: "compose" }>,
+    attemptId?: string,
+  ): ComposeScheduleExecutor;
   supportsReadinessDelay?: boolean;
 };
 
@@ -123,14 +126,16 @@ export class ComposeExecutionPlatform implements ExecutionPlatform {
     const composeTarget = this.composeTarget(target);
     const services = await this.discover(composeTarget);
     this.validateSchedule(schedule, services);
-    return this.options.executorFor(composeTarget).runSchedule(schedule, services.map(({ id }) => id));
+    return this.options.executorFor(composeTarget, schedule.id)
+      .runSchedule(schedule, services.map(({ id }) => id));
   }
 
   async replay(target: TargetConfig, schedule: Schedule): Promise<RunResult> {
     const composeTarget = this.composeTarget(target);
     const services = await this.discover(composeTarget);
     this.validateSchedule(schedule, services);
-    return this.options.executorFor(composeTarget).replaySchedule(schedule, services.map(({ id }) => id));
+    return this.options.executorFor(composeTarget, schedule.id)
+      .replaySchedule(schedule, services.map(({ id }) => id));
   }
 
   private composeTarget(target: TargetConfig): Extract<TargetConfig, { platform: "compose" }> {

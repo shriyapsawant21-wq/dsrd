@@ -8,6 +8,8 @@ import type { ComposeServiceState } from "./observer.js";
 export type DockerComposeClientOptions = {
   projectDirectory: string;
   composeFile?: string;
+  /** Names the exact Compose resources that this runtime attempt owns. */
+  projectName?: string;
   runner: CommandRunner;
 };
 
@@ -30,7 +32,22 @@ export class DockerCommandError extends Error {
 }
 
 export class DockerComposeClient {
-  constructor(private readonly options: DockerComposeClientOptions) {}
+  constructor(private readonly options: DockerComposeClientOptions) {
+    if (options.projectName !== undefined && !/^[a-z0-9][a-z0-9_-]*$/.test(options.projectName)) {
+      throw new Error(`Invalid Compose project name: ${options.projectName}`);
+    }
+  }
+
+  /**
+   * Performs target validation and expensive image acquisition outside the
+   * startup/readiness observation window.  A later `up` is deliberately
+   * forbidden from building or pulling.
+   */
+  async prepare(signal?: AbortSignal): Promise<void> {
+    await this.runCompose(["config", "--quiet"], signal);
+    await this.runCompose(["pull", "--ignore-buildable"], signal);
+    await this.runCompose(["build"], signal);
+  }
 
   async stopStack(): Promise<void> {
     await this.runCompose(["down", "--remove-orphans"]);
@@ -52,9 +69,26 @@ export class DockerComposeClient {
       [
         "up",
         "-d",
+        "--no-build",
+        "--pull",
+        "never",
         ...(options.includeDependencies === false ? ["--no-deps"] : []),
         service,
       ],
+      options.signal,
+    );
+  }
+
+  async startServices(
+    services: string[],
+    options: { signal?: AbortSignal } = {},
+  ): Promise<void> {
+    if (services.length === 0) return;
+    for (const service of services) {
+      this.assertServiceName(service);
+    }
+    await this.runCompose(
+      ["up", "-d", "--no-build", "--pull", "never", ...services],
       options.signal,
     );
   }
@@ -90,6 +124,7 @@ export class DockerComposeClient {
       command: "docker",
       args: [
         "compose",
+        ...(this.options.projectName === undefined ? [] : ["-p", this.options.projectName]),
         ...(this.options.composeFile === undefined
           ? []
           : ["-f", this.options.composeFile]),
@@ -117,6 +152,12 @@ export class DockerComposeClient {
         const value: unknown = JSON.parse(line);
         return value as Record<string, unknown>;
       });
+    }
+  }
+
+  private assertServiceName(service: string): void {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(service)) {
+      throw new Error(`Invalid Compose service name: ${service}`);
     }
   }
 }
