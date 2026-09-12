@@ -59,6 +59,20 @@ describe("race-debugger CLI", () => {
     });
   });
 
+  it("inspects a checkout through the onboarding service in JSON mode", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-inspect-"));
+    directories.push(directory);
+    await writeFile(join(directory, "manifest.json"), JSON.stringify({ workloads: [] }));
+    const output: string[] = [];
+
+    await expect(runCli(["inspect", "--checkout", directory, "--json"], {
+      platform: fakePlatform,
+      log: (message) => output.push(message),
+    })).resolves.toBe(0);
+
+    expect(JSON.parse(output[0]!)).toMatchObject({ status: "inspected", candidates: [expect.objectContaining({ adapter: "local-process" })] });
+  });
+
   it("delegates scriptable searches to the shared discovery service", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-shared-"));
     directories.push(directory);

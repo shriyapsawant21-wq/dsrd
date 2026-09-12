@@ -6,7 +6,7 @@ import { loadFailureArtifact, saveFailureArtifact } from "./artifact.js";
 import { generateAdaptiveCandidateStages, generateFocusedCandidates } from "./candidates.js";
 import { fakePlatform } from "./fake-platform.js";
 import { discoverFailure, replayFailure } from "./orchestrator.js";
-import { runSharedDiscovery, type SharedDiscoveryOptions } from "./onboarding.js";
+import { createOnboardingService, runSharedDiscovery, type SharedDiscoveryOptions } from "./onboarding.js";
 import { chooseMenuAction, createReadlinePrompt, type PromptAdapter } from "./prompt.js";
 import { renderDashboard, renderReplaySummary, renderResultSummary } from "./presentation.js";
 import type { ExecutionPlatform, TargetConfig } from "@dsrd/contracts";
@@ -76,6 +76,27 @@ export async function runCli(
   const runSchedule = dependencies.platform.run.bind(dependencies.platform);
   const replaySchedule = dependencies.platform.replay.bind(dependencies.platform);
   program.name("race-debugger").description("Explore startup timing races");
+
+  program
+    .command("inspect")
+    .description("inspect a checkout or pinned Git repository without executing it")
+    .option("--checkout <path>", "repository checkout path")
+    .option("--git <url>", "pinned Git repository URL")
+    .option("--ref <ref>", "Git revision or ref", "HEAD")
+    .option("--json", "emit a machine-readable inspection result")
+    .action(async (options: { checkout?: string; git?: string; ref: string; json?: boolean }) => {
+      if ((options.checkout === undefined) === (options.git === undefined)) throw new Error("Provide exactly one of --checkout or --git");
+      const inspection = await createOnboardingService({ platform: dependencies.platform }).inspect({
+        repository: options.checkout === undefined
+          ? { kind: "git", url: options.git!, ref: options.ref, submodules: false, lfs: false }
+          : { kind: "checkout", path: options.checkout },
+      });
+      if (options.json) {
+        dependencies.log(JSON.stringify({ status: "inspected", ...inspection }));
+      } else {
+        dependencies.log(`Found ${inspection.candidates.length} target candidate(s).`);
+      }
+    });
 
   program
     .command("search")
