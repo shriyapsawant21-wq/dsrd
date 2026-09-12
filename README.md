@@ -20,6 +20,113 @@ from runtime evidence, minimizes the triggering schedule, and verifies it by
 replaying the saved artifact. It is not a log-only analyzer or static Compose
 lint tool.
 
+## How DSRD decides that it found a race
+
+DSRD separates an individual physical run from an experiment result. A run is
+`healthy`, a machine-verifiable `workload_failure`, an `execution_error`,
+`inconclusive`, or `cancelled`. A race is published only after the experiment
+establishes a difference between a healthy baseline and a controlled schedule.
+
+```text
+inspect target → prepare/reset outside startup timing → healthy baseline
+→ bounded schedule search → matching failure confirmations → minimization
+→ independent ordered replay → verified failure artifact
+```
+
+By default, the onboarding path requires three healthy baseline runs, three
+matching failure confirmations, and three independent replay reproductions.
+The failure identity is a structured signature—workload, assertion, failure
+category, and stable code when available—not an error-string match. Replay also
+requires the saved ordering evidence to occur in the same order.
+
+The oracle accepts evidence such as an unexpected process exit, a failed
+declared readiness assertion, a validated application failure event, or an
+unexpected terminal-job result. Log lines including `ECONNREFUSED` and
+`timeout` provide useful timeline context, but cannot independently declare a
+race.
+
+## What DSRD changes, and what it preserves
+
+Schedules contain only explicit start or supported readiness delays. DSRD does
+not modify a target repository to manufacture a failure. Compose dependency
+conditions (`service_started`, `service_healthy`, and
+`service_completed_successfully`) remain in force; a delay changes when an
+otherwise eligible action may occur, not the target's declared guarantees.
+
+For each physical Compose attempt, DSRD creates an opaque project identity and
+cleans only resources bearing that identity. Image pull/build, target
+validation, and reset happen before the measured startup deadline. Local
+processes run from command arrays—not shell strings—and their owned process
+group is terminated with TERM followed by KILL when required. No broad Docker
+cleanup command is used.
+
+## Supported target types
+
+| Target | Input | Readiness/evidence | Notes |
+| --- | --- | --- | --- |
+| Docker Compose | `compose.yaml`, `compose.yml`, or `docker-compose.*` | Compose lifecycle, health/readiness, terminal workload evidence | Docker and Compose are required. Each run has its own project name. |
+| Local process | `manifest.json` | Process, TCP, or HTTP readiness | Commands are explicit arrays; stateful targets need an explicit reset command. |
+| Kubernetes | Manifest YAML | Kubernetes adapter evidence | Optional; requires `kubectl` and a disposable cluster. |
+
+Repository onboarding also supports an existing checkout or a pinned Git URL and
+ref. A pinned Git source is resolved to a detached revision and recursively
+frozen read-only. Inspection is metadata-only: it never runs `npm install`,
+package scripts, or arbitrary target commands.
+
+## Outcomes and artifacts
+
+| Outcome | Meaning | Artifact |
+| --- | --- | --- |
+| `found_failure` | Healthy baseline, repeated matching failure, minimization, and replay all succeeded | Verified v3 artifact when onboarding metadata is available |
+| `no_failure` | The declared bounded search completed without a confirmed failure | None |
+| `target_unhealthy` | Baseline is already unhealthy | None |
+| `needs_configuration` | Required launch, readiness, secret binding, or reset meaning is missing | None |
+| `unsupported_target` | No available adapter can execute the target safely | None |
+| `execution_error` | Setup, Docker/runtime, timeout, or cleanup error | None |
+| `inconclusive` | Evidence conflicts or the execution budget expires | None |
+| `cancelled` | The caller stopped the experiment | None |
+
+Legacy v2 artifacts remain readable for compatibility. A verified v3 artifact
+adds repository identity, configuration/model/environment digests, required
+public bindings, the failure signature, replay ordering constraints, and the
+baseline/confirmation/replay counts. Artifacts never contain secret values,
+credentials, or raw environment bindings.
+
+## Repository configuration
+
+Portable onboarding uses strict `dsrd.yaml` configuration to select a target,
+describe workloads and readiness assertions, declare state reset policy, and
+bound the experiment. Unknown fields, invalid dependency references, missing
+Compose launch files, unsafe local-process state, and invalid counts/deadlines
+are rejected rather than guessed.
+
+```yaml
+version: 1
+target:
+  id: process:api
+  adapter: local-process
+  root: .
+workloads:
+  api:
+    kind: process
+    command: [node, dist/server.js]
+    readiness:
+      id: api-ready
+      type: http
+      url: http://127.0.0.1:3000/health
+      observer: host
+      expectedStatus: 200
+state: { policy: fresh-owned }
+experiment:
+  baselineRuns: 3
+  confirmationRuns: 3
+  replayRuns: 3
+```
+
+See [configuration.md](docs/configuration.md), [outcomes.md](docs/outcomes.md),
+and [operations.md](docs/operations.md) for the complete contract and safety
+rules.
+
 ## Why use DSRD
 
 DSRD changes execution timing and relies on deterministic runtime evidence from
@@ -105,6 +212,12 @@ workspace in isolation (nested worktrees and build output are excluded).
 npm install
 npm run typecheck
 npm test
+```
+
+Run the Docker-gated conformance test only when Docker is available:
+
+```bash
+DSRD_DOCKER_CONFORMANCE=1 npx vitest run packages/runtime/test/compose.conformance.test.ts
 ```
 
 ### Local-process golden path
