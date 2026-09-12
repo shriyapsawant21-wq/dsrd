@@ -1,4 +1,4 @@
-export type RunPhase = "queued" | "exploring" | "minimizing" | "completed" | "no_failure" | "error";
+export type RunPhase = "queued" | "exploring" | "minimizing" | "completed" | "no_failure" | "target_unhealthy" | "needs_configuration" | "unsupported_target" | "execution_error" | "inconclusive" | "cancelled" | "error";
 
 export type ProgressEvent = {
   runId: string;

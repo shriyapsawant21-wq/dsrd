@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import type { ExecutionPlatform, TargetConfig, Workload } from "@dsrd/contracts";
 import { ComposeProofObserver, WorkloadProofObserver } from "@dsrd/proof";
 import { ComposeExecutionPlatform, DockerComposeClient, DockerComposeServiceDiscovery, DockerRuntimeController, LocalProcessExecutionPlatform, NodeCommandRunner, SystemDelay } from "@dsrd/runtime";
-import { discoverFailure, generateCandidates } from "@dsrd/scheduler";
+import { discoverFailure, generateCandidates, type DiscoveryResult } from "@dsrd/scheduler";
 import type { DiscoveryRunner } from "./run-service.js";
 
 export function createProductionDiscoveryRunner(): DiscoveryRunner {
@@ -30,8 +30,16 @@ export function createProductionDiscoveryRunner(): DiscoveryRunner {
       },
       replaySchedule: platform.replay.bind(platform),
     });
-    return result.status === "found_failure" ? { status: "completed", artifact: result.artifact, testedSchedules: result.testedSchedules } : { status: "no_failure", testedSchedules: result.testedSchedules };
+    return toDiscoveryRunnerResult(result);
   };
+}
+
+export function toDiscoveryRunnerResult(result: DiscoveryResult): Awaited<ReturnType<DiscoveryRunner>> {
+  if (result.status === "found_failure") {
+    return { status: "completed", artifact: result.artifact, testedSchedules: result.testedSchedules };
+  }
+  if (result.status === "no_failure") return { status: "no_failure", testedSchedules: result.testedSchedules };
+  return { status: result.status, testedSchedules: result.testedSchedules };
 }
 
 function createComposePlatform(target: Extract<TargetConfig, { platform: "compose" }>, workloads: () => Workload[]): ExecutionPlatform {
