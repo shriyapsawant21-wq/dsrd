@@ -29,6 +29,30 @@ export type OnboardingService = {
   replay(artifact: FailureArtifactV3): Promise<ReplayResult>;
 };
 
+export type SharedDiscoveryOptions = {
+  platform: ExecutionPlatform;
+  target: TargetConfig;
+  delayOptionsMs: readonly number[];
+  baselineRuns?: number;
+  confirmationRuns?: number;
+  maxSchedules?: number;
+};
+
+/** The single direct-target search path used by public CLI/API adapters. */
+export async function runSharedDiscovery(options: SharedDiscoveryOptions): Promise<DiscoveryResult> {
+  const workloads = await options.platform.discover(options.target);
+  return discoverFailure({
+    candidates: generateCandidates(workloads, options.delayOptionsMs),
+    delayOptionsMs: options.delayOptionsMs,
+    target: options.target,
+    runSchedule: options.platform.run.bind(options.platform),
+    replaySchedule: options.platform.replay.bind(options.platform),
+    maxSchedules: options.maxSchedules,
+    baselineRuns: options.baselineRuns,
+    confirmationRuns: options.confirmationRuns,
+  });
+}
+
 type PreparedOnboarding = {
   workspace: RepositoryWorkspace;
   snapshot: FailureArtifactV3["repository"];

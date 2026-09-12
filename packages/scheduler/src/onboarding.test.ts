@@ -4,9 +4,21 @@ import { join } from "node:path";
 import type { ExecutionPlatform, RunResult, Schedule, TargetConfig, Workload } from "@dsrd/contracts";
 import { describe, expect, it } from "vitest";
 
-import { createOnboardingService } from "./onboarding.js";
+import { createOnboardingService, runSharedDiscovery } from "./onboarding.js";
 
 describe("onboarding service", () => {
+  it("uses the same shared discovery entry point for a configured direct target", async () => {
+    const result = await runSharedDiscovery({
+      platform: successfulPlatform(),
+      target: { platform: "local-process", manifestPath: "manifest.json" },
+      delayOptionsMs: [0, 1],
+      baselineRuns: 1,
+      confirmationRuns: 1,
+    });
+
+    expect(result).toMatchObject({ status: "found_failure" });
+  });
+
   it("returns needs_configuration without executing a selected checkout lacking dsrd.yaml", async () => {
     const root = await mkdtemp(join(tmpdir(), "dsrd-onboarding-test-"));
     await writeFile(join(root, "manifest.json"), JSON.stringify({ workloads: [] }));

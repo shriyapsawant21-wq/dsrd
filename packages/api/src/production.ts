@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import type { ExecutionPlatform, TargetConfig, Workload } from "@dsrd/contracts";
 import { ComposeProofObserver, WorkloadProofObserver } from "@dsrd/proof";
 import { ComposeExecutionPlatform, DockerComposeClient, DockerComposeServiceDiscovery, DockerRuntimeController, LocalProcessExecutionPlatform, NodeCommandRunner, SystemDelay } from "@dsrd/runtime";
-import { discoverFailure, generateCandidates, type DiscoveryResult } from "@dsrd/scheduler";
+import { runSharedDiscovery, type DiscoveryResult } from "@dsrd/scheduler";
 import type { DiscoveryRunner } from "./run-service.js";
 
 export function createProductionDiscoveryRunner(): DiscoveryRunner {
@@ -14,22 +14,14 @@ export function createProductionDiscoveryRunner(): DiscoveryRunner {
       : target.platform === "compose"
         ? createComposePlatform(target, () => workloads)
         : (() => { throw new Error("Kubernetes projects are not supported by the web API"); })();
-    workloads = await platform.discover(target);
     const delayOptionsMs = [0, 500, 1000, 1500, 2000, 3000];
-    const candidates = generateCandidates(workloads, delayOptionsMs).slice(0, 36);
-    let testedSchedules = 0;
-    const result = await discoverFailure({
-      candidates,
+    const result = await runSharedDiscovery({
+      platform,
       delayOptionsMs,
       target,
-      runSchedule: async (runTarget, schedule) => {
-        const runResult = await platform.run(runTarget, schedule);
-        testedSchedules += 1;
-        onProgress(testedSchedules, candidates.length);
-        return runResult;
-      },
-      replaySchedule: platform.replay.bind(platform),
+      maxSchedules: 36,
     });
+    onProgress(result.testedSchedules, 36);
     return toDiscoveryRunnerResult(result);
   };
 }
