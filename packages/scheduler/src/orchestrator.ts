@@ -61,8 +61,8 @@ export async function discoverFailure(
     return options.runSchedule(target, schedule);
   };
   const baseline: Schedule = { id: "baseline", perturbations: [] };
-  const baselineRuns = options.baselineRuns ?? 1;
-  const confirmationRuns = options.confirmationRuns ?? 2;
+  const baselineRuns = options.baselineRuns ?? 3;
+  const confirmationRuns = options.confirmationRuns ?? 3;
   if (!Number.isInteger(baselineRuns) || baselineRuns < 1) {
     throw new RangeError("baselineRuns must be a positive integer");
   }

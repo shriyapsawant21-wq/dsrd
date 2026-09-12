@@ -101,14 +101,14 @@ describe("race-debugger CLI", () => {
     expect(prompts).toContain("Save results as [failure.json]: ");
     expect(output.join("\n")).toContain("RUN 01");
     expect(output.join("\n")).toContain("PASS\n\nRUN 02");
-    expect(output.join("\n")).toContain("FAIL — race detected\n\nRUN 03");
+    expect(output.join("\n")).toContain("RUN 03  Testing baseline...\nPASS\n\nRUN 04");
     expect(output.join("\n")).toContain("\n\nFailure found");
     expect(output.join("\n")).toContain("Found at perturbation: bootstrap ready +2500ms");
     expect(output.join("\n")).toContain("Failure reason: fake platform: bootstrap unavailable");
     expect(output.join("\n")).toContain("Failure evidence: api startup_failed at 2500ms — fake platform: bootstrap was not ready");
     expect(output.join("\n")).toContain("Search scope:");
     expect(output.join("\n")).toContain("Scope explored: 1 of 3 candidate schedules (stopped at first failure).");
-    expect(output.join("\n")).toContain("Physical attempts: 6.");
+    expect(output.join("\n")).toContain("Physical attempts: 9.");
     expect(output.join("\n")).toContain("Minimization: 1 perturbation(s) → 1 perturbation(s).");
     await expect(loadFailureArtifact(artifactPath)).resolves.toMatchObject({ version: 2 });
   });

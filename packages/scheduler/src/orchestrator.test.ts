@@ -23,6 +23,21 @@ describe("orchestration", () => {
     expect(result).toEqual({ status: "target_unhealthy", testedSchedules: 1, exploredCandidateSchedules: 0 });
   });
 
+  it("runs three healthy baselines before exploring candidates by default", async () => {
+    const calls: string[] = [];
+    await discoverFailure({
+      candidates: [{ id: "failing", perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }] }],
+      delayOptionsMs: [0, 1000],
+      target,
+      runSchedule: async (_target, schedule) => {
+        calls.push(schedule.id);
+        return fakeRun(schedule);
+      },
+    });
+
+    expect(calls.slice(0, 3)).toEqual(["baseline", "baseline", "baseline"]);
+  });
+
   it("searches, minimizes, and produces a target-bearing artifact from runner evidence", async () => {
     const original: Schedule = {
       id: "schedule-001",
@@ -42,7 +57,7 @@ describe("orchestration", () => {
 
     expect(result).toEqual({
       status: "found_failure",
-      testedSchedules: 10,
+      testedSchedules: 13,
       exploredCandidateSchedules: 1,
       artifact: {
         version: 2,
@@ -127,6 +142,8 @@ describe("orchestration", () => {
       delayOptionsMs: [0, 500, 1000],
       target,
       maxSchedules: 2,
+      baselineRuns: 1,
+      confirmationRuns: 2,
       runSchedule: async (_target, schedule) => {
         calls.push(schedule.id);
         return fakeRun(schedule);
