@@ -26,18 +26,17 @@
 
 **Files:**
 - Create: `vitest.config.ts`
-- Modify: `package.json`
 - Test: `packages/contracts/test/contracts.test.ts` as a control test through the root script.
 
 **Interfaces:**
 - Root `npm test` discovers test files only under this checkout's `packages/` and `fixtures/` paths.
 
-- [ ] Write a root Vitest configuration whose `test.exclude` contains `**/.worktrees/**`, `**/node_modules/**`, and `**/dist/**` in addition to Vitest defaults.
-- [ ] Run `npx vitest run packages/contracts` from the repository root and observe the pre-change output include a contracts test from each nested worktree.
-- [ ] Add the configuration and set the root test command to use it.
-- [ ] Run `npx vitest run packages/contracts` and verify exactly one contracts test file executes.
-- [ ] Run `npm test` and verify no output path begins `.worktrees/`.
-- [ ] Commit `test: isolate primary checkout discovery`.
+- [x] Write a root Vitest configuration whose `test.exclude` contains `**/.worktrees/**`, `**/node_modules/**`, and `**/dist/**` in addition to Vitest defaults.
+- [x] Run `npx vitest run packages/contracts` from the repository root and observe the pre-change output include a contracts test from each nested worktree.
+- [x] Add the automatically loaded root configuration.
+- [x] Run `npx vitest run packages/contracts` and verify exactly one contracts test file executes.
+- [x] Run `npm test` and verify no output path begins `.worktrees/`.
+- [x] Commit `test: isolate primary checkout discovery`.
 
 ### Task 2: Classify physical runs in shared contracts
 
