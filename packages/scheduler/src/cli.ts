@@ -85,16 +85,22 @@ export async function runCli(
     .option("--ref <ref>", "Git revision or ref", "HEAD")
     .option("--json", "emit a machine-readable inspection result")
     .action(async (options: { checkout?: string; git?: string; ref: string; json?: boolean }) => {
-      if ((options.checkout === undefined) === (options.git === undefined)) throw new Error("Provide exactly one of --checkout or --git");
-      const inspection = await createOnboardingService({ platform: dependencies.platform }).inspect({
-        repository: options.checkout === undefined
-          ? { kind: "git", url: options.git!, ref: options.ref, submodules: false, lfs: false }
-          : { kind: "checkout", path: options.checkout },
-      });
-      if (options.json) {
-        dependencies.log(JSON.stringify({ status: "inspected", ...inspection }));
-      } else {
-        dependencies.log(`Found ${inspection.candidates.length} target candidate(s).`);
+      try {
+        if ((options.checkout === undefined) === (options.git === undefined)) throw new Error("Provide exactly one of --checkout or --git");
+        const inspection = await createOnboardingService({ platform: dependencies.platform }).inspect({
+          repository: options.checkout === undefined
+            ? { kind: "git", url: options.git!, ref: options.ref, submodules: false, lfs: false }
+            : { kind: "checkout", path: options.checkout },
+        });
+        if (options.json) {
+          dependencies.log(JSON.stringify({ status: "inspected", ...inspection }));
+        } else {
+          dependencies.log(`Found ${inspection.candidates.length} target candidate(s).`);
+        }
+      } catch (error) {
+        if (!options.json) throw error;
+        exitCode = 5;
+        dependencies.log(JSON.stringify({ status: "execution_error", exitCode }));
       }
     });
 

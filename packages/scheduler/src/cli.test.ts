@@ -1,6 +1,8 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFile as execFileCallback } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExecutionPlatform, RunResult, Schedule, TargetConfig, Workload } from "@dsrd/contracts";
 
@@ -10,6 +12,7 @@ import { fakePlatform } from "./fake-platform.js";
 import { runSharedDiscovery } from "./onboarding.js";
 
 const directories: string[] = [];
+const execFile = promisify(execFileCallback);
 
 class ReceiverDependentPlatform implements ExecutionPlatform {
   runCalls = 0;
@@ -71,6 +74,52 @@ describe("race-debugger CLI", () => {
     })).resolves.toBe(0);
 
     expect(JSON.parse(output[0]!)).toMatchObject({ status: "inspected", candidates: [expect.objectContaining({ adapter: "local-process" })] });
+  });
+
+  it("emits a stable JSON error when checkout inspection fails", async () => {
+    const output: string[] = [];
+
+    await expect(runCli(["inspect", "--checkout", join(tmpdir(), "missing-checkout"), "--json"], {
+      platform: fakePlatform,
+      log: (message) => output.push(message),
+    })).resolves.toBe(5);
+
+    expect(output).toHaveLength(1);
+    expect(JSON.parse(output[0]!)).toMatchObject({ status: "execution_error", exitCode: 5 });
+  });
+
+  it("searches a configured checkout through onboard-search and saves a v3 artifact", async () => {
+    const directory = await onboardingFixture("dsrd-cli-onboard-checkout-");
+    const artifactPath = join(directory, "failure.json");
+    const output: string[] = [];
+
+    await expect(runCli(["onboard-search", "--checkout", directory, "--json", "--output", artifactPath], {
+      platform: signaturePlatform(),
+      log: (message) => output.push(message),
+    })).resolves.toBe(0);
+
+    expect(JSON.parse(output[0]!)).toMatchObject({ status: "found_failure", exitCode: 0, artifactPath });
+    await expect(loadFailureArtifact(artifactPath)).resolves.toMatchObject({ version: 3, repository: { contentDigest: expect.any(String) } });
+  });
+
+  it("searches a pinned local Git revision through onboard-search", async () => {
+    const directory = await onboardingFixture("dsrd-cli-onboard-git-");
+    await execFile("git", ["init", directory]);
+    await execFile("git", ["-C", directory, "config", "user.email", "test@example.com"]);
+    await execFile("git", ["-C", directory, "config", "user.name", "Test"]);
+    await execFile("git", ["-C", directory, "add", "manifest.json", "dsrd.yaml"]);
+    await execFile("git", ["-C", directory, "commit", "-m", "fixture"]);
+    const revision = (await execFile("git", ["-C", directory, "rev-parse", "HEAD"])).stdout.trim();
+    const artifactPath = join(directory, "failure.json");
+    const output: string[] = [];
+
+    await expect(runCli(["onboard-search", "--git", `file://${directory}`, "--ref", revision, "--json", "--output", artifactPath], {
+      platform: signaturePlatform(),
+      log: (message) => output.push(message),
+    })).resolves.toBe(0);
+
+    expect(JSON.parse(output[0]!)).toMatchObject({ status: "found_failure", exitCode: 0, artifactPath });
+    await expect(loadFailureArtifact(artifactPath)).resolves.toMatchObject({ version: 3, repository: { resolvedRevision: revision } });
   });
 
   it("delegates scriptable searches to the shared discovery service", async () => {
@@ -296,6 +345,23 @@ describe("race-debugger CLI", () => {
     expect(output.join("\n")).toContain("Evidence matched: 1/1 timeline events.");
   });
 
+  it("emits one stable JSON terminal record for replay", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-replay-json-"));
+    directories.push(directory);
+    const artifactPath = join(directory, "failure.json");
+    await writeFile(join(directory, "manifest.json"), "{}\n");
+    await runCli(["search", "--target", directory, "--output", artifactPath], { platform: fakePlatform, log: () => undefined });
+    const output: string[] = [];
+
+    await expect(runCli(["replay", artifactPath, "--json"], {
+      platform: fakePlatform,
+      log: (message) => output.push(message),
+    })).resolves.toBe(0);
+
+    expect(output).toHaveLength(1);
+    expect(JSON.parse(output[0]!)).toMatchObject({ status: "reproduced", exitCode: 0, result: { status: "workload_failure" } });
+  });
+
   it("keeps the execution platform receiver for search and replay", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-"));
     directories.push(directory);
@@ -316,3 +382,34 @@ describe("race-debugger CLI", () => {
     expect(platform.replayCalls).toBe(2);
   });
 });
+
+async function onboardingFixture(prefix: string): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), prefix));
+  directories.push(directory);
+  await writeFile(join(directory, "manifest.json"), JSON.stringify({ workloads: [] }));
+  await writeFile(join(directory, "dsrd.yaml"), [
+    "version: 1",
+    "target:",
+    "  id: local-process:manifest.json",
+    "  adapter: local-process",
+    "  root: .",
+    "workloads:",
+    "  api:",
+    "    kind: process",
+    "    command: [node, app.js]",
+    "    readiness: { id: api-ready, type: http, url: http://127.0.0.1:3000/health, observer: host, expectedStatus: 200 }",
+    "state: { policy: fresh-owned }",
+    "experiment: { baselineRuns: 1, confirmationRuns: 1, replayRuns: 1, maxExecutions: 100, maxInFlight: 1, delayOptionsMs: [0, 1000], timeouts: { acquisitionMs: 1000, preflightMs: 1000, runMs: 1000, readinessMs: 1000, cleanupMs: 1000 } }",
+  ].join("\n"));
+  return directory;
+}
+
+function signaturePlatform(): ExecutionPlatform {
+  const run = async (target: TargetConfig, schedule: Schedule): Promise<RunResult> => {
+    const result = await fakePlatform.run(target, schedule);
+    return result.status === "workload_failure"
+      ? { ...result, failureSignature: { workloadId: "api", assertionId: "bootstrap-ready", category: "readiness_failed" } }
+      : result;
+  };
+  return { discover: fakePlatform.discover, reset: fakePlatform.reset, run, replay: run };
+}

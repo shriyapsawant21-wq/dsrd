@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { once } from "node:events";
 import request from "supertest";
 import { createApp } from "./app.js";
 import { RunStore } from "./run-store.js";
@@ -47,6 +48,33 @@ it("starts repository search asynchronously and preserves its terminal outcome",
   expect(created.status).toBe(202);
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(store.get(created.body.runId)?.progress).toMatchObject({ phase: "needs_configuration", percentage: 100 });
+});
+
+it("persists a repository-search artifact and completes its event stream", async () => {
+  const store = new RunStore();
+  let finish!: (value: { status: string; testedSchedules: number; artifact: FailureArtifact }) => void;
+  const artifact: FailureArtifact = {
+    version: 2, createdAt: new Date(0).toISOString(),
+    target: { platform: "compose", composeFile: "compose.yaml" },
+    originalSchedule: { id: "original", perturbations: [] }, minimizedSchedule: { id: "minimal", perturbations: [] }, events: [],
+  };
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    search: async () => new Promise((resolve) => { finish = resolve; }),
+  });
+  const server = app.listen(0);
+  await once(server, "listening");
+  try {
+    const created = await request(app).post("/api/repositories/search").send({ repository: { kind: "checkout", path: "/project" } });
+    const port = (server.address() as { port: number }).port;
+    const events = await fetch(`http://127.0.0.1:${port}/api/runs/${created.body.runId}/events`);
+    finish({ status: "found_failure", testedSchedules: 7, artifact });
+
+    expect(await events.text()).toContain("event: completed");
+    expect((await request(app).get(`/api/runs/${created.body.runId}/report`)).body).toMatchObject({ version: 2, minimizedSchedule: { id: "minimal" } });
+    expect(store.get(created.body.runId)?.progress).toMatchObject({ phase: "completed", testedSchedules: 7 });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
 });
 
 it("returns an uploaded run and reports that an unfinished artifact is unavailable", async () => {
