@@ -40,6 +40,25 @@ afterEach(async () => {
 });
 
 describe("race-debugger CLI", () => {
+  it("emits one stable JSON terminal record for scriptable searches", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-json-"));
+    directories.push(directory);
+    await writeFile(join(directory, "manifest.json"), "{}\n");
+    const output: string[] = [];
+
+    const exitCode = await runCli([
+      "search", "--json", "--target", directory, "--output", join(directory, "failure.json"),
+    ], { platform: fakePlatform, log: (message) => output.push(message) });
+
+    expect(exitCode).toBe(0);
+    expect(output).toHaveLength(1);
+    expect(JSON.parse(output[0]!)).toMatchObject({
+      status: "found_failure",
+      exitCode: 0,
+      artifactPath: join(directory, "failure.json"),
+    });
+  });
+
   it("delegates scriptable searches to the shared discovery service", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-shared-"));
     directories.push(directory);

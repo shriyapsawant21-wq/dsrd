@@ -87,8 +87,9 @@ export async function runCli(
     .option("-n, --max-runs <number>", "maximum physical schedule executions")
     .option("--baseline-runs <number>", "required consecutive healthy baseline runs")
     .option("--confirmation-runs <number>", "required matching failure confirmations")
+    .option("--json", "emit one machine-readable terminal result")
     .option("-o, --output <path>", "artifact output path", "failure.json")
-    .action(async (options: { platform: string; target: string; delayOptions?: string; quick?: boolean; maxRuns?: string; baselineRuns?: string; confirmationRuns?: string; output: string }) => {
+    .action(async (options: { platform: string; target: string; delayOptions?: string; quick?: boolean; maxRuns?: string; baselineRuns?: string; confirmationRuns?: string; output: string; json?: boolean }) => {
       const delayOptionsMs = options.delayOptions
         ? parseDelayOptions(options.delayOptions)
         : options.quick ? quickDelayOptionsMs : defaultDelayOptionsMs;
@@ -105,17 +106,19 @@ export async function runCli(
       const runWithProgress = async (runTarget: TargetConfig, schedule: Parameters<typeof runSchedule>[1]) => {
         runNumber += 1;
         const verificationLabel = failureFound ? "  (minimization/replay verification)" : "";
-        dependencies.log(`RUN ${runNumber.toString().padStart(2, "0")}${verificationLabel}  ${describeSchedule(schedule)}`);
+        if (!options.json) dependencies.log(`RUN ${runNumber.toString().padStart(2, "0")}${verificationLabel}  ${describeSchedule(schedule)}`);
         const runResult = await runSchedule(runTarget, schedule);
         if (runResult.status === "workload_failure") failureFound = true;
-        dependencies.log(runResult.status === "healthy" ? "PASS" : "FAIL — race detected");
-        dependencies.log("");
+        if (!options.json) {
+          dependencies.log(runResult.status === "healthy" ? "PASS" : "FAIL — race detected");
+          dependencies.log("");
+        }
         return runResult;
       };
-      dependencies.log(options.quick
+      if (!options.json) dependencies.log(options.quick
         ? `Starting quick scan (${Math.min(maxRuns ?? candidateMaximum, candidateMaximum)} schedules maximum).`
         : `Starting adaptive thorough scan (${Math.min(maxRuns ?? candidateMaximum, candidateMaximum)} schedules maximum).`);
-      dependencies.log("");
+      if (!options.json) dependencies.log("");
       const result = await (dependencies.sharedDiscovery ?? runSharedDiscovery)({
         platform: dependencies.platform,
         delayOptionsMs,
@@ -131,6 +134,10 @@ export async function runCli(
 
       if (result.status !== "found_failure") {
         exitCode = result.status === "no_failure" ? 0 : discoveryExitCode(result.status);
+        if (options.json) {
+          dependencies.log(JSON.stringify({ status: result.status, exitCode, testedSchedules: result.testedSchedules }));
+          return;
+        }
         dependencies.log(
           renderResultSummary({
             status: result.status === "no_failure" ? "no-failure" : result.status,
@@ -142,6 +149,10 @@ export async function runCli(
 
       const artifactPath = resolve(options.output);
       await saveFailureArtifact(artifactPath, result.artifact);
+      if (options.json) {
+        dependencies.log(JSON.stringify({ status: "found_failure", exitCode: 0, testedSchedules: result.testedSchedules, artifactPath }));
+        return;
+      }
       const dimensions = workloads.reduce(
         (count, workload) => count + workload.perturbablePhases.length,
         0
