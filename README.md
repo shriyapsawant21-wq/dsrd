@@ -2,7 +2,7 @@
 
 A local startup-race debugger for Docker Compose, local-process, and optional Kubernetes targets. It actively explores startup timing to discover, minimize, and replay hidden readiness failures.
 
-## Core Idea
+## What it does
 
 ```text
  normal application target
@@ -15,7 +15,10 @@ A local startup-race debugger for Docker Compose, local-process, and optional Ku
       -> show a timeline
 ```
 
-This is a dynamic debugger, not an AI log summarizer or static Compose linter.
+DSRD changes startup timing, executes the system repeatedly, detects failures
+from runtime evidence, minimizes the triggering schedule, and verifies it by
+replaying the saved artifact. It is not a log-only analyzer or static Compose
+lint tool.
 
 ## Why use DSRD
 
@@ -24,6 +27,13 @@ the failure oracle. That means it can produce a minimized, replayable
 counterexample for a race that a normal startup, static dependency graph, or
 log summary can miss. The saved artifact includes the target and schedule, so
 replay follows the same platform and oracle path as discovery.
+
+## Requirements
+
+- Node.js 20 or newer
+- npm
+- Docker Desktop or Docker Engine with Compose v2 for Compose targets
+- `kubectl` and a disposable cluster only for Kubernetes targets
 
 ## Quick start
 
@@ -35,8 +45,8 @@ race-debugger replay failure.json
 ```
 
 Use `compose` with a Compose file, or `local-process` with a local-process
-manifest. Kubernetes remains optional: it requires `kubectl` and a disposable
-cluster only when `--platform kubernetes` is selected.
+manifest. Kubernetes is optional and requires `kubectl` plus a disposable
+cluster.
 
 ```bash
 race-debugger search --platform kubernetes --target fixtures/kubernetes-startup-race/manifest.yaml --delay-options 0,1500 --output kubernetes-failure.json
@@ -44,35 +54,17 @@ race-debugger replay kubernetes-failure.json
 ```
 
 For the supplied local Kind fixture, create/select the `kind-dsrd-c7` context
-before running the Kubernetes command. No kubeconfig, token, or cluster is
-needed for Compose and local-process workflows.
+before running the Kubernetes command. No cluster is needed for Compose or
+local-process workflows.
 
-## Components
+## Usage
 
-Any contributor may work on any component:
-
-- Schedule exploration, minimization, and CLI
-- Docker Compose runtime and delay injection
-- Observability, failure oracle, and demo fixture
-
-## Documentation
-- [`AGENTS.md`](AGENTS.md) — shared Codex/project rules
-- [`docs/plan.md`](docs/plan.md) — overall architecture and hackathon plan
-- [`docs/contracts/shared-contracts.md`](docs/contracts/shared-contracts.md) — shared interfaces
-- [`docs/integration.md`](docs/integration.md) — team integration workflow
-- [`docs/plans/akil.md`](docs/plans/akil.md) — schedule exploration plan
-- [`docs/plans/riya.md`](docs/plans/riya.md) — runtime plan
-- [`docs/plans/shriya.md`](docs/plans/shriya.md) — proof-layer plan
-- [`docs/runbooks/demo.md`](docs/runbooks/demo.md) — golden demo runbook
-
-## Target CLI
-
-### Interactive dashboard
+### Interactive mode
 
 Run `race-debugger` with no command from a terminal to open the DSRD dashboard and choose Search, Replay, or Quit.
 The guided search uses numbered Docker Compose/local-process choices, validates the selected project directory, and offers a recommended Quick scan that tests one perturbation at a time. Choose Thorough scan only when you intentionally want the larger Cartesian search. Compose projects should contain `compose.yaml`, `compose.yml`, `docker-compose.yaml`, or `docker-compose.yml`; local-process projects should contain `manifest.json`.
 
-### Scriptable commands
+### Scriptable mode
 
 ```bash
 race-debugger search --platform local-process --target fixtures/local-startup-race
@@ -102,9 +94,6 @@ npm run dev:web
 Open `http://127.0.0.1:5173`, scroll to `INITIALIZE_SEQUENCE`, and upload a `.yaml` or `.yml` Docker Compose file. The interface streams real exploration progress, shows the deterministic failure report, exposes its event timeline, and downloads the `FailureArtifact` JSON.
 
 The current upload contract accepts one self-contained Compose file. Compose projects that reference local build contexts, env files, bind-mounted source, or other companion files need archive/project-directory staging before they can run from a browser upload.
-
-## MVP Definition of Done
-A bug is only considered discovered when a normally working fixture fails under an explored schedule, the failure is automatically detected, the schedule is minimized, and replay reproduces the same expected failure.
 
 ## Reproducible validation
 
