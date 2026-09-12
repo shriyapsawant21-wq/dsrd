@@ -3,6 +3,11 @@
 ## Objective
 Build a local Docker Compose debugger that actively explores startup timing, discovers hidden race conditions, minimizes the timing needed to reproduce them, and emits a deterministic replay artifact plus timeline.
 
+For the proposed evolution to cloned-project portability and isolated execution
+capacity, see [Portable and Scalable DSRD Architecture](superpowers/specs/2026-09-12-scalable-debugger-architecture.md).
+It preserves this MVP pipeline and defines staged migration gates; proposed
+contracts and deployment capabilities are not yet implemented.
+
 ## Problem
 A container being started does not mean the process inside it is ready. Services often encode hidden timing assumptions: an API assumes Postgres is listening, a worker assumes the API is healthy, or migrations assume another dependency has completed. These failures are intermittent because startup timing changes across runs.
 
