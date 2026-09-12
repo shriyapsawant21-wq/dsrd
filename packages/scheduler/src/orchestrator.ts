@@ -23,7 +23,7 @@ export type DiscoverFailureOptions = {
   maxSchedules?: number;
   baselineRuns?: number;
   confirmationRuns?: number;
-  artifactV3?: Omit<FailureArtifactV3, "version" | "createdAt" | "target" | "originalSchedule" | "minimizedSchedule" | "expectedFailureReason" | "events">;
+  artifactV3?: Omit<FailureArtifactV3, "version" | "createdAt" | "target" | "originalSchedule" | "minimizedSchedule" | "expectedFailureReason" | "events" | "signature" | "orderingConstraints"> & Partial<Pick<FailureArtifactV3, "orderingConstraints">>;
 };
 
 export type DiscoveryResult =
@@ -117,10 +117,17 @@ export async function discoverFailure(
   );
   if (!confirmation) return { status: "inconclusive", testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
 
+  if (options.artifactV3 !== undefined && searchResult.failureSignature === undefined) {
+    return { status: "inconclusive", testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
+  }
+
   const runReproducibly: RunSchedule = async (target, schedule) => {
     const first = await runSchedule(target, schedule);
-    if (first.status !== "workload_failure") return first;
-    return runSchedule(target, schedule);
+    if (!matchesFailure(first, searchResult.failureReason, searchResult.failureSignature)) return first;
+    const second = await runSchedule(target, schedule);
+    return matchesFailure(second, searchResult.failureReason, searchResult.failureSignature)
+      ? second
+      : { ...second, status: "inconclusive" };
   };
   const minimizedSchedule = await minimizeSchedule(
     searchResult.failingSchedule,
@@ -130,6 +137,17 @@ export async function discoverFailure(
   );
   const minimizedRun = await runReproducibly(options.target, minimizedSchedule);
   if (minimizedRun.status !== "workload_failure") {
+    return { status: "inconclusive", testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
+  }
+
+  if (options.artifactV3 !== undefined && !await confirmFailure(
+    options.target,
+    minimizedSchedule,
+    searchResult.failureReason,
+    searchResult.failureSignature,
+    confirmationRuns,
+    runSchedule,
+  )) {
     return { status: "inconclusive", testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
   }
 
@@ -147,6 +165,8 @@ export async function discoverFailure(
     })
     : createVerifiedFailureArtifact({
       ...options.artifactV3,
+      signature: searchResult.failureSignature!,
+      orderingConstraints: options.artifactV3.orderingConstraints ?? orderingConstraints(minimizedRun.events),
       createdAt: options.createdAt ?? new Date().toISOString(),
       target: options.target,
       originalSchedule: searchResult.failingSchedule,
@@ -155,9 +175,12 @@ export async function discoverFailure(
       events: minimizedRun.events,
     });
   if (options.replaySchedule !== undefined) {
-    const replay = await replayFailure(artifact, options.replaySchedule);
-    if (replay.status !== "reproduced") {
-      return { status: "inconclusive", testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
+    const replayRuns = artifact.version === 3 ? artifact.verification.replayRuns : 1;
+    for (let run = 0; run < replayRuns; run += 1) {
+      const replay = await replayFailure(artifact, options.replaySchedule);
+      if (replay.status !== "reproduced") {
+        return { status: "inconclusive", testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
+      }
     }
   }
 
@@ -182,6 +205,15 @@ function terminalStatus(result: RunResult): "target_unhealthy" | "needs_configur
   return "inconclusive";
 }
 
+function orderingConstraints(events: readonly TimelineEvent[]): FailureArtifactV3["orderingConstraints"] {
+  const first = events[0] ?? { service: "unknown", event: "failure" };
+  const last = events.at(-1) ?? first;
+  return [{
+    before: { workloadId: first.service, event: first.event, occurrence: 0 },
+    after: { workloadId: last.service, event: last.event, occurrence: 0 },
+  }];
+}
+
 async function confirmFailure(
   target: TargetConfig,
   schedule: Schedule,
@@ -199,6 +231,16 @@ async function confirmFailure(
     ) return false;
   }
   return true;
+}
+
+function matchesFailure(
+  result: RunResult,
+  expectedReason: string | undefined,
+  expectedSignature: RunResult["failureSignature"],
+): boolean {
+  return result.status === "workload_failure" &&
+    result.failureReason === expectedReason &&
+    (expectedSignature === undefined || sameSignature(expectedSignature, result.failureSignature));
 }
 
 function sameSignature(
@@ -221,10 +263,11 @@ export async function replayFailure(
     artifact.expectedFailureReason === undefined ||
     artifact.expectedFailureReason === result.failureReason;
   const evidenceMatches = hasOrderedEvidence(artifact.events, result.events);
+  const signatureMatches = artifact.version !== 3 || sameSignature(artifact.signature, result.failureSignature);
 
   return {
     status:
-      result.status === "workload_failure" && reasonMatches && evidenceMatches
+      result.status === "workload_failure" && reasonMatches && evidenceMatches && signatureMatches
         ? "reproduced"
         : "not_reproduced",
     result

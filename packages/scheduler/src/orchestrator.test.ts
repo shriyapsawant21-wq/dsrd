@@ -153,6 +153,74 @@ describe("orchestration", () => {
     expect(result).toMatchObject({ status: "found_failure", artifact: { version: 3, signature: { assertionId: "startup" } } });
   });
 
+  it("does not publish a v3 artifact when minimization changes the structured failure signature", async () => {
+    const result = await discoverFailure({
+      candidates: [{ id: "failing", perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }] }],
+      delayOptionsMs: [0, 500, 1000],
+      target,
+      baselineRuns: 1,
+      confirmationRuns: 1,
+      runSchedule: async (_target, schedule) => {
+        if (schedule.perturbations.length === 0) return { scheduleId: schedule.id, status: "healthy", events: [], logs: [] };
+        const assertionId = schedule.perturbations[0]?.delayMs === 1000 ? "database-ready" : "cache-ready";
+        return {
+          scheduleId: schedule.id,
+          status: "workload_failure",
+          failureReason: "startup failed",
+          failureSignature: { workloadId: "api", assertionId, category: "readiness_failed" as const },
+          events: [{ timeMs: 1, service: "api", event: "startup_failed" }],
+          logs: [],
+        };
+      },
+      replaySchedule: async (_target, schedule) => ({
+        scheduleId: schedule.id,
+        status: "workload_failure",
+        failureReason: "startup failed",
+        failureSignature: { workloadId: "api", assertionId: "database-ready", category: "readiness_failed" },
+        events: [{ timeMs: 1, service: "api", event: "startup_failed" }],
+        logs: [],
+      }),
+      artifactV3: verifiedArtifactContext({ workloadId: "api", assertionId: "database-ready", category: "readiness_failed" }),
+    });
+
+    expect(result).toMatchObject({ status: "inconclusive" });
+    expect(result).not.toHaveProperty("artifact");
+  });
+
+  it("requires every configured v3 replay repetition to reproduce the structured signature", async () => {
+    let replayRuns = 0;
+    const result = await discoverFailure({
+      candidates: [{ id: "failing", perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }] }],
+      delayOptionsMs: [0, 1000],
+      target,
+      baselineRuns: 1,
+      confirmationRuns: 1,
+      runSchedule: async (_target, schedule) => ({
+        ...fakeRun(schedule),
+        ...(schedule.perturbations.length === 0 ? {} : {
+          failureSignature: { workloadId: "api", assertionId: "startup", category: "structured_failure" as const },
+        }),
+      }),
+      replaySchedule: async (_target, schedule) => {
+        replayRuns += 1;
+        return replayRuns === 1
+          ? {
+              ...fakeRun(schedule),
+              failureSignature: { workloadId: "api", assertionId: "startup", category: "structured_failure" as const },
+            }
+          : { scheduleId: schedule.id, status: "healthy", events: [], logs: [] };
+      },
+      artifactV3: verifiedArtifactContext(
+        { workloadId: "api", assertionId: "startup", category: "structured_failure" },
+        { replayRuns: 2 },
+      ),
+    });
+
+    expect(result).toMatchObject({ status: "inconclusive" });
+    expect(result).not.toHaveProperty("artifact");
+    expect(replayRuns).toBe(2);
+  });
+
   it("searches, minimizes, and produces a target-bearing artifact from runner evidence", async () => {
     const original: Schedule = {
       id: "schedule-001",
@@ -353,6 +421,27 @@ describe("orchestration", () => {
     ).resolves.toMatchObject({ status: "reproduced" });
   });
 });
+
+function verifiedArtifactContext(
+  signature: { workloadId: string; assertionId: string; category: "unexpected_exit" | "readiness_failed" | "structured_failure" | "job_exit" },
+  verification: Partial<{ baselineRuns: number; confirmationRuns: number; replayRuns: number }> = {},
+) {
+  return {
+    repository: { snapshotId: "snapshot-1", contentDigest: "digest-1" },
+    selectedTarget: { id: "local", adapter: "local-process" as const, root: "/workspace", launchFiles: ["manifest.json"], requirements: [], evidence: [] },
+    configDigest: "config-1",
+    modelDigest: "model-1",
+    environmentDigest: "environment-1",
+    requiredBindings: [],
+    policy: { baselineRuns: 1 },
+    signature,
+    orderingConstraints: [{
+      before: { workloadId: "api", event: "startup_failed", occurrence: 0 },
+      after: { workloadId: "api", event: "startup_failed", occurrence: 0 },
+    }],
+    verification: { baselineRuns: 1, confirmationRuns: 1, replayRuns: 1, ...verification },
+  };
+}
 
 function fakeRun(schedule: Schedule): RunResult {
   const fails = (schedule.perturbations.find(
