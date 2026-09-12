@@ -12,6 +12,7 @@ export type LocalProcessWorkload = Workload & {
 export type LocalProcessManifest = {
   workloads: LocalProcessWorkload[];
   resetCommand?: string[];
+  resetRequired?: boolean;
 };
 
 export type LoadedLocalProcessManifest = LocalProcessManifest & { directory: string };
@@ -25,10 +26,11 @@ export async function loadLocalProcessManifest(manifestPath: string): Promise<Lo
 
 function isManifest(value: unknown): value is LocalProcessManifest {
   if (typeof value !== "object" || value === null) return false;
-  const candidate = value as { workloads?: unknown; resetCommand?: unknown };
+  const candidate = value as { workloads?: unknown; resetCommand?: unknown; resetRequired?: unknown };
   return Array.isArray(candidate.workloads) &&
     candidate.workloads.every(isWorkload) &&
-    (candidate.resetCommand === undefined || isCommand(candidate.resetCommand));
+    (candidate.resetCommand === undefined || isCommand(candidate.resetCommand)) &&
+    (candidate.resetRequired === undefined || typeof candidate.resetRequired === "boolean");
 }
 
 function isWorkload(value: unknown): value is LocalProcessWorkload {

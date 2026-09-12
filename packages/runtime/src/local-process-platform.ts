@@ -68,6 +68,18 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
   async run(target: TargetConfig, schedule: Schedule): Promise<RunResult> {
     const manifest = await this.manifestFor(target);
     this.validateSchedule(schedule, manifest.workloads);
+    if (manifest.resetRequired && manifest.resetCommand === undefined) {
+      return {
+        scheduleId: schedule.id,
+        status: "execution_error",
+        events: [],
+        logs: [],
+        diagnostics: [{
+          code: "local_process_reset_required",
+          message: "This local-process target requires an explicit resetCommand before execution",
+        }],
+      };
+    }
     try {
       await this.reset(target);
       return await this.execute(manifest, schedule);

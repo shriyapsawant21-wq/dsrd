@@ -212,6 +212,25 @@ describe("LocalProcessExecutionPlatform", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("reports an explicit reset configuration error for a stateful manifest", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-local-reset-required-"));
+    const manifest = join(directory, "manifest.json");
+    await writeFile(manifest, JSON.stringify({
+      resetRequired: true,
+      workloads: [{ id: "server", kind: "process", perturbablePhases: [], command: [process.execPath, "-e", "setInterval(() => {}, 1000)"] }],
+    }));
+    try {
+      const platform = new LocalProcessExecutionPlatform({ observer });
+
+      await expect(platform.run({ platform: "local-process", manifestPath: manifest }, { id: "missing-reset", perturbations: [] })).resolves.toMatchObject({
+        status: "execution_error",
+        diagnostics: [{ code: "local_process_reset_required" }],
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 });
 
 function availablePort(): Promise<number> {
