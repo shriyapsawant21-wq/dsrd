@@ -8,6 +8,7 @@ import { failureArtifactSchema, repositoryInputSchema, type FailureArtifact, typ
 export type ApiOnboardingOperations = {
   inspect?: (repository: RepositoryInput) => Promise<InspectionResult>;
   replay?: (artifact: FailureArtifact) => Promise<{ status: "reproduced" | "not_reproduced"; result: RunResult }>;
+  search?: (request: { repository: RepositoryInput; targetId?: string; configPath?: string }) => Promise<unknown>;
 };
 
 function summarizeFailures(artifact?: FailureArtifact) {
@@ -36,6 +37,16 @@ export function createApp(store: RunStore, service: RunService, onboarding: ApiO
       return res.status(200).json(result);
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid replay artifact" });
+    }
+  });
+  app.post("/api/repositories/search", async (req, res) => {
+    if (onboarding.search === undefined) return res.status(501).json({ error: "Repository search is not configured" });
+    try {
+      const repository = repositoryInputSchema.parse(req.body?.repository);
+      const result = await onboarding.search({ repository, targetId: req.body?.targetId, configPath: req.body?.configPath });
+      return res.status(200).json(result);
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid repository search" });
     }
   });
   app.post("/api/runs", upload.array("projectFiles", 200), async (req, res) => {

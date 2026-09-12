@@ -196,9 +196,39 @@ export async function runCli(
     });
 
   program
+    .command("onboard-search")
+    .description("search an explicitly configured checkout or pinned Git repository")
+    .option("--checkout <path>", "repository checkout path")
+    .option("--git <url>", "pinned Git repository URL")
+    .option("--ref <ref>", "Git revision or ref", "HEAD")
+    .option("--target-id <id>", "explicit inspected target id")
+    .option("--config <path>", "repository-relative dsrd.yaml path")
+    .option("--json", "emit one machine-readable terminal result")
+    .option("-o, --output <path>", "artifact output path", "failure.json")
+    .action(async (options: { checkout?: string; git?: string; ref: string; targetId?: string; config?: string; json?: boolean; output: string }) => {
+      if ((options.checkout === undefined) === (options.git === undefined)) throw new Error("Provide exactly one of --checkout or --git");
+      const result = await createOnboardingService({ platform: dependencies.platform }).search({
+        repository: options.checkout === undefined
+          ? { kind: "git", url: options.git!, ref: options.ref, submodules: false, lfs: false }
+          : { kind: "checkout", path: options.checkout },
+        targetId: options.targetId,
+        configPath: options.config,
+      });
+      exitCode = result.status === "found_failure" || result.status === "no_failure" ? 0 : discoveryExitCode(result.status);
+      if (result.status === "found_failure") {
+        const artifactPath = resolve(options.output);
+        await saveFailureArtifact(artifactPath, result.artifact);
+        dependencies.log(options.json ? JSON.stringify({ status: result.status, exitCode, testedSchedules: result.testedSchedules, artifactPath }) : `Failure artifact saved: ${artifactPath}`);
+        return;
+      }
+      dependencies.log(options.json ? JSON.stringify({ status: result.status, exitCode, testedSchedules: result.testedSchedules, ...("diagnostics" in result ? { diagnostics: result.diagnostics } : {}) }) : result.status);
+    });
+
+  program
     .command("replay <artifactPath>")
     .description("replay a saved failure artifact")
-    .action(async (artifactPath: string) => {
+    .option("--json", "emit one machine-readable terminal result")
+    .action(async (artifactPath: string, options: { json?: boolean }) => {
       const artifact = await loadFailureArtifact(artifactPath);
       const result = await replayFailure(artifact, replaySchedule);
       exitCode = result.status === "reproduced" ? 0 : 4;
@@ -207,6 +237,10 @@ export async function runCli(
           actual.service === expected.service && actual.event === expected.event
         )
       ).length;
+      if (options.json) {
+        dependencies.log(JSON.stringify({ status: result.status, exitCode, result: result.result }));
+        return;
+      }
       dependencies.log(renderReplaySummary(
         artifact,
         result.result,
