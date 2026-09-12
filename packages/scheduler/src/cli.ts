@@ -127,7 +127,10 @@ export async function runCli(
 
       if (result.status !== "found_failure") {
         dependencies.log(
-          renderResultSummary({ status: "no-failure", testedSchedules: result.testedSchedules })
+          renderResultSummary({
+            status: result.status === "no_failure" ? "no-failure" : result.status,
+            testedSchedules: result.testedSchedules,
+          })
         );
         return;
       }

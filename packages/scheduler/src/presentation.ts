@@ -1,7 +1,7 @@
 import type { FailureArtifact, RunResult } from "@dsrd/contracts";
 
 type ResultSummaryInput = {
-  status: "failure" | "no-failure" | "reproduced" | "not-reproduced";
+  status: "failure" | "no-failure" | "target_unhealthy" | "needs_configuration" | "unsupported_target" | "execution_error" | "inconclusive" | "cancelled" | "reproduced" | "not-reproduced";
   testedSchedules?: number;
   artifactPath?: string;
   perturbations?: Array<{ workloadId: string; phase: string; delayMs: number }>;
@@ -83,6 +83,18 @@ export function renderResultSummary(input: ResultSummaryInput): string {
       return styleFailure(summary.join("\n"), input.useColor === true);
     case "no-failure":
       return `No failure found after ${input.testedSchedules ?? 0} schedules.`;
+    case "target_unhealthy":
+      return "Target is unhealthy; exploration did not run.";
+    case "needs_configuration":
+      return "Target needs configuration; exploration did not run.";
+    case "unsupported_target":
+      return "Target is unsupported; exploration did not run.";
+    case "execution_error":
+      return "Execution failed; no replay artifact was published.";
+    case "inconclusive":
+      return "Exploration is inconclusive; no replay artifact was published.";
+    case "cancelled":
+      return "Exploration was cancelled; no replay artifact was published.";
     case "reproduced":
       return "Replay reproduced expected failure.";
     case "not-reproduced":

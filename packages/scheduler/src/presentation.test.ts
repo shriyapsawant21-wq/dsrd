@@ -52,4 +52,9 @@ describe("CLI presentation", () => {
     expect(output).toContain("Replay (PowerShell): race-debugger replay 'artifacts/it''s $risky; file.json'");
     expect(output).toContain("Replay (POSIX): race-debugger replay 'artifacts/it'\"'\"'s $risky; file.json'");
   });
+
+  it("renders target health and inconclusive outcomes without claiming no failure", () => {
+    expect(renderResultSummary({ status: "target_unhealthy" })).toBe("Target is unhealthy; exploration did not run.");
+    expect(renderResultSummary({ status: "inconclusive" })).toBe("Exploration is inconclusive; no replay artifact was published.");
+  });
 });
