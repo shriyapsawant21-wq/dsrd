@@ -9,7 +9,7 @@ export type ProofEvaluator = {
 function failedResult(input: WorkloadObservationSnapshot, failureReason: string): RunResult {
   return {
     scheduleId: input.scheduleId,
-    status: "fail",
+    status: "workload_failure",
     events: buildWorkloadTimeline(input),
     logs: [...input.logs],
     failureReason,
@@ -43,7 +43,7 @@ export function evaluateWorkloadRun(input: WorkloadObservationSnapshot): RunResu
   if (completePass) {
     return {
       scheduleId: input.scheduleId,
-      status: "pass",
+      status: "healthy",
       events: buildWorkloadTimeline(input),
       logs: [...input.logs],
     };

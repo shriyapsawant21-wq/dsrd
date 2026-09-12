@@ -25,7 +25,7 @@ describe("runtime replay", () => {
       observer: {
         evaluate: async (snapshot: ObservationSnapshot): Promise<RunResult> => ({
           scheduleId: snapshot.scheduleId,
-          status: "fail",
+          status: "workload_failure",
           failureReason: "oracle-owned failure",
           events: [],
           logs: snapshot.logs
@@ -41,7 +41,7 @@ describe("runtime replay", () => {
     expect(starts).toEqual(["postgres", "api"]);
     expect(result).toEqual({
       scheduleId: "saved-failure",
-      status: "fail",
+      status: "workload_failure",
       failureReason: "oracle-owned failure",
       events: [],
       logs: ["api | failed"]

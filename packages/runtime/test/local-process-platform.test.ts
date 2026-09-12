@@ -21,7 +21,7 @@ const observer = {
     );
     return {
       scheduleId: snapshot.scheduleId,
-      status: failed === undefined ? "pass" : "fail",
+      status: failed === undefined ? "healthy" : "workload_failure",
       events: snapshot.workloadEvents.map(({ workload, ...event }) => ({
         ...event,
         service: workload,
@@ -43,7 +43,7 @@ describe("LocalProcessExecutionPlatform", () => {
     });
     await expect(platform.run(target, { id: "baseline", perturbations: [] })).resolves.toMatchObject({
       scheduleId: "baseline",
-      status: "pass",
+      status: "healthy",
     });
     const failing = {
       id: "delayed-bootstrap",
@@ -51,11 +51,11 @@ describe("LocalProcessExecutionPlatform", () => {
     };
     await expect(platform.run(target, failing)).resolves.toMatchObject({
       scheduleId: "delayed-bootstrap",
-      status: "fail",
+      status: "workload_failure",
     });
     await expect(platform.replay(target, failing)).resolves.toMatchObject({
       scheduleId: "delayed-bootstrap",
-      status: "fail",
+      status: "workload_failure",
     });
   });
 
@@ -63,13 +63,13 @@ describe("LocalProcessExecutionPlatform", () => {
     const platform = new LocalProcessExecutionPlatform({ observer: new WorkloadProofObserver() });
 
     await expect(platform.run(target, { id: "proof-baseline", perturbations: [] })).resolves.toMatchObject({
-      status: "pass",
+      status: "healthy",
     });
     await expect(platform.run(target, {
       id: "proof-failure",
       perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 100 }],
     })).resolves.toMatchObject({
-      status: "fail",
+      status: "workload_failure",
       failureReason: expect.stringContaining("exited with code 1"),
     });
   });

@@ -18,7 +18,7 @@ describe("KubernetesProofObserver", () => {
       events: [{ workload: "migrate", timeMs: 10, event: "job_failed" }],
     })).resolves.toMatchObject({
       scheduleId: "delayed-database",
-      status: "fail",
+      status: "workload_failure",
     });
   });
 });

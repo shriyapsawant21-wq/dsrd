@@ -51,12 +51,12 @@ class RecordingExecutor implements ComposeScheduleExecutor {
 
   async runSchedule(schedule: { id: string }, services: string[]): Promise<RunResult> {
     this.runs.push({ id: schedule.id, services });
-    return { scheduleId: schedule.id, status: "pass", events: [], logs: [] };
+    return { scheduleId: schedule.id, status: "healthy", events: [], logs: [] };
   }
 
   async replaySchedule(schedule: { id: string }, services: string[]): Promise<RunResult> {
     this.runs.push({ id: `replay:${schedule.id}`, services });
-    return { scheduleId: schedule.id, status: "pass", events: [], logs: [] };
+    return { scheduleId: schedule.id, status: "healthy", events: [], logs: [] };
   }
 }
 

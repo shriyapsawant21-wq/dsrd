@@ -14,7 +14,7 @@ import {
 
 const passingResult: RunResult = {
   scheduleId: "schedule-1",
-  status: "pass",
+  status: "healthy",
   events: [],
   logs: []
 };

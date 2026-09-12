@@ -58,7 +58,7 @@ export async function discoverFailure(
 
   const runReproducibly: RunSchedule = async (target, schedule) => {
     const first = await runSchedule(target, schedule);
-    if (first.status !== "fail") return first;
+    if (first.status !== "workload_failure") return first;
     return runSchedule(target, schedule);
   };
   const minimizedSchedule = await minimizeSchedule(
@@ -68,7 +68,7 @@ export async function discoverFailure(
     options.delayOptionsMs
   );
   const minimizedRun = await runReproducibly(options.target, minimizedSchedule);
-  if (minimizedRun.status !== "fail") {
+  if (minimizedRun.status !== "workload_failure") {
     return { status: "no_failure", testedSchedules: searchResult.testedSchedules };
   }
 
@@ -100,7 +100,7 @@ export async function replayFailure(
 
   return {
     status:
-      result.status === "fail" && reasonMatches && evidenceMatches
+      result.status === "workload_failure" && reasonMatches && evidenceMatches
         ? "reproduced"
         : "not_reproduced",
     result

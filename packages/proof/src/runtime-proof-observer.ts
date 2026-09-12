@@ -64,7 +64,7 @@ export class WorkloadProofObserver implements WorkloadRunObserver {
       const result = this.classify(evidence);
       if (
         snapshot.refresh === undefined ||
-        result.status === "pass" ||
+        result.status === "healthy" ||
         (refreshed && hasTerminalFailure(evidence))
       ) {
         return result;

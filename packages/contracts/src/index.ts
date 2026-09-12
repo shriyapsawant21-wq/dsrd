@@ -32,12 +32,25 @@ export type TimelineEvent = {
   detail?: string;
 };
 
+export type PhysicalRunStatus =
+  | "healthy"
+  | "workload_failure"
+  | "execution_error"
+  | "inconclusive"
+  | "cancelled";
+
+export type RunDiagnostic = {
+  code: string;
+  message: string;
+};
+
 export type RunResult = {
   scheduleId: string;
-  status: "pass" | "fail";
+  status: PhysicalRunStatus;
   events: TimelineEvent[];
   logs: string[];
   failureReason?: string;
+  diagnostics?: RunDiagnostic[];
 };
 
 export interface ExecutionPlatform {

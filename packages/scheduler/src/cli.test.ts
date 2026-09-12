@@ -208,7 +208,7 @@ describe("race-debugger CLI", () => {
     expect(output.join("\n")).toContain("Expected failure: fake platform: bootstrap unavailable");
     expect(output.join("\n")).toContain("Observed failure: fake platform: bootstrap unavailable");
     expect(output.join("\n")).toContain("Replay evidence: api startup_failed at 1000ms — fake platform: bootstrap was not ready");
-    expect(output.join("\n")).toContain("Replay execution: FAIL");
+    expect(output.join("\n")).toContain("Replay execution: WORKLOAD_FAILURE");
     expect(output.join("\n")).toContain("Evidence matched: 1/1 timeline events.");
   });
 

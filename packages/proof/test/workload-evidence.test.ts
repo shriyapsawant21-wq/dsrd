@@ -119,7 +119,7 @@ describe("C3 workload proof evidence", () => {
   it("passes without knowing platform-specific service names", () => {
     expect(evaluateWorkloadRun(passingSnapshot())).toMatchObject({
       scheduleId: "generic-normal",
-      status: "pass",
+      status: "healthy",
     });
   });
 
@@ -132,7 +132,7 @@ describe("C3 workload proof evidence", () => {
     );
 
     expect(evaluateWorkloadRun(snapshot)).toMatchObject({
-      status: "fail",
+      status: "workload_failure",
       failureReason: "sqlite-migrate exited with code 7",
     });
   });
@@ -152,7 +152,7 @@ describe("C3 workload proof evidence", () => {
     const result = await observer.evaluate(snapshot);
 
     expect(result).toMatchObject({
-      status: "fail",
+      status: "workload_failure",
       failureReason: "Dependency was not ready (catalog-http)",
     });
     expect(result.events).toContainEqual(
@@ -200,7 +200,7 @@ describe("C3 workload proof evidence", () => {
 
     const result = await observer.evaluate({ ...snapshot, refresh });
 
-    expect(result.status).toBe("pass");
+    expect(result.status).toBe("healthy");
   });
 
   it("refreshes transient readiness and log failures before classifying the run", async () => {
@@ -226,7 +226,7 @@ describe("C3 workload proof evidence", () => {
       },
     });
 
-    expect(result.status).toBe("pass");
+    expect(result.status).toBe("healthy");
     expect(refreshes).toBe(1);
   });
 
@@ -250,7 +250,7 @@ describe("C3 workload proof evidence", () => {
       },
     });
 
-    expect(result.status).toBe("pass");
+    expect(result.status).toBe("healthy");
     expect(refreshes).toBe(1);
   });
 

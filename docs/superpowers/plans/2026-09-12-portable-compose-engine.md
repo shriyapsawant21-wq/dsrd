@@ -66,12 +66,12 @@ export type RunResult = {
 };
 ```
 
-- [ ] Add a failing contract test requiring `healthy`, `workload_failure`, and `execution_error` to be accepted and legacy `pass`/`fail` to be rejected.
-- [ ] Run the focused contract test and confirm it fails because the new statuses are not assignable.
-- [ ] Add the shared types above and update direct shared-contract type assertions.
-- [ ] Migrate every production and test `RunResult` literal from `pass`/`fail` to the corresponding physical status, retaining failure reasons only for workload failures.
-- [ ] Run `npm run typecheck` and `npx vitest run packages/contracts`; both must pass.
-- [ ] Commit `feat(contracts): classify physical run outcomes`.
+- [x] Add a failing contract test requiring `healthy`, `workload_failure`, and `execution_error` to be accepted and legacy `pass`/`fail` to be rejected.
+- [x] Run the focused contract test and confirm it fails because the new statuses are not assignable.
+- [x] Add the shared types above and update direct shared-contract type assertions.
+- [x] Migrate every production and test `RunResult` literal from `pass`/`fail` to the corresponding physical status, retaining failure reasons only for workload failures.
+- [x] Run `npm run typecheck` and `npx vitest run packages/contracts`; both must pass.
+- [x] Commit `feat(contracts): classify physical run outcomes`.
 
 ### Task 3: Require strong proof evidence
 

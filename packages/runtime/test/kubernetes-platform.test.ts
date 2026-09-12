@@ -38,12 +38,12 @@ class RecordingExecutor implements KubernetesScheduleExecutor {
 
   async runSchedule(schedule: { id: string }, workloads: string[]): Promise<RunResult> {
     this.runs.push({ id: schedule.id, workloads });
-    return { scheduleId: schedule.id, status: "pass", events: [], logs: [] };
+    return { scheduleId: schedule.id, status: "healthy", events: [], logs: [] };
   }
 
   async replaySchedule(schedule: { id: string }, workloads: string[]): Promise<RunResult> {
     this.runs.push({ id: `replay:${schedule.id}`, workloads });
-    return { scheduleId: schedule.id, status: "pass", events: [], logs: [] };
+    return { scheduleId: schedule.id, status: "healthy", events: [], logs: [] };
   }
 }
 
@@ -103,7 +103,7 @@ describe("KubectlKubernetesExecutor", () => {
     const executor = new KubectlKubernetesExecutor({
       target: { platform: "kubernetes", manifestPath: "fixture.yaml", namespace: "race-debugger" },
       runner,
-      evaluate: async (scheduleId) => ({ scheduleId, status: "pass", events: [], logs: [] }),
+      evaluate: async (scheduleId) => ({ scheduleId, status: "healthy", events: [], logs: [] }),
     });
     await executor.runSchedule({ id: "delay-api", perturbations: [{ workloadId: "api", phase: "start", delayMs: 20 }] }, ["api", "database"]);
     const applies = runner.invocations.filter(({ args }) => args[0] === "apply").map(({ args }) => args[args.indexOf("-l") + 1]);
@@ -124,12 +124,12 @@ describe("KubectlKubernetesExecutor", () => {
       runner,
       observer: { evaluate: async (snapshot) => {
         observed.push(snapshot);
-        return { scheduleId: snapshot.scheduleId, status: "fail", events: [], logs: snapshot.logs };
+        return { scheduleId: snapshot.scheduleId, status: "workload_failure", events: [], logs: snapshot.logs };
       } },
     });
 
     await expect(executor.runSchedule({ id: "failed-job", perturbations: [] }, ["migrate"]))
-      .resolves.toMatchObject({ status: "fail" });
+      .resolves.toMatchObject({ status: "workload_failure" });
     expect(observed).toEqual([expect.objectContaining({
       scheduleId: "failed-job",
       states: [expect.objectContaining({ workload: "migrate", state: "exited", exitCode: 1 })],
@@ -163,7 +163,7 @@ describe("KubectlKubernetesExecutor", () => {
       runner,
       observer: { evaluate: async (snapshot) => {
         observed.push(snapshot);
-        return { scheduleId: snapshot.scheduleId, status: "fail", events: [], logs: [] };
+        return { scheduleId: snapshot.scheduleId, status: "workload_failure", events: [], logs: [] };
       } },
     });
 
@@ -180,7 +180,7 @@ describe("KubectlKubernetesExecutor", () => {
     const executor = new KubectlKubernetesExecutor({
       target: { platform: "kubernetes", manifestPath: "fixture.yaml", namespace: "race-debugger" },
       runner,
-      evaluate: async (scheduleId) => ({ scheduleId, status: "pass", events: [], logs: [] }),
+      evaluate: async (scheduleId) => ({ scheduleId, status: "healthy", events: [], logs: [] }),
     });
 
     await executor.resetNamespace();
