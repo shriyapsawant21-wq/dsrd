@@ -12,6 +12,13 @@ export type ApiOnboardingOperations = {
   search?: (request: { repository: RepositoryInput; targetId?: string; configPath?: string }) => Promise<{ status: string; testedSchedules?: number; artifact?: FailureArtifact }>;
 };
 
+export function isTerminalRunPhase(phase: RunPhase): boolean {
+  return [
+    "completed", "no_failure", "target_unhealthy", "needs_configuration",
+    "unsupported_target", "execution_error", "inconclusive", "cancelled", "error",
+  ].includes(phase);
+}
+
 function summarizeFailures(artifact?: FailureArtifact) {
   if (!artifact) return [];
   const event = [...artifact.events].reverse().find(({ event }) => /fail|error|refused|exit|fatal/i.test(event)) ?? artifact.events.at(-1);
@@ -84,7 +91,7 @@ export function createApp(store: RunStore, service: RunService, onboarding: ApiO
     if (!run) return res.status(404).json({ error: "Run not found" });
     res.status(200).set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     const write = (event: typeof run.progress) => {
-      const terminal = ["completed", "no_failure", "error"].includes(event.phase);
+      const terminal = isTerminalRunPhase(event.phase);
       res.write(`event: ${terminal ? event.phase : "progress"}\ndata: ${JSON.stringify(event)}\n\n`);
       if (terminal) res.end();
     };

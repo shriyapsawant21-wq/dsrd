@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { once } from "node:events";
 import request from "supertest";
-import { createApp } from "./app.js";
+import { createApp, isTerminalRunPhase } from "./app.js";
 import { RunStore } from "./run-store.js";
 import { RunService } from "./run-service.js";
 import type { FailureArtifact } from "@dsrd/contracts";
@@ -10,6 +10,16 @@ it("rejects a non-Compose upload", async () => {
   const store = new RunStore();
   const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })));
   expect((await request(app).post("/api/runs").attach("composeFile", Buffer.from("x"), "logs.txt")).status).toBe(400);
+});
+
+it("closes repository event streams for every terminal outcome", () => {
+  for (const phase of [
+    "completed", "no_failure", "target_unhealthy", "needs_configuration",
+    "unsupported_target", "execution_error", "inconclusive", "cancelled", "error",
+  ] as const) {
+    expect(isTerminalRunPhase(phase)).toBe(true);
+  }
+  expect(isTerminalRunPhase("exploring")).toBe(false);
 });
 
 it("inspects a repository input through the injected onboarding operation", async () => {
