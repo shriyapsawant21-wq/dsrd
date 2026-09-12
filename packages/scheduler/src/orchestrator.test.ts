@@ -38,6 +38,35 @@ describe("orchestration", () => {
     expect(calls.slice(0, 3)).toEqual(["baseline", "baseline", "baseline"]);
   });
 
+  it("treats mismatched structured failure signatures as inconclusive", async () => {
+    let candidateRuns = 0;
+    const result = await discoverFailure({
+      candidates: [{ id: "failing", perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }] }],
+      delayOptionsMs: [0, 1000],
+      target,
+      baselineRuns: 1,
+      confirmationRuns: 2,
+      runSchedule: async (_target, schedule) => {
+        if (schedule.perturbations.length === 0) return { scheduleId: schedule.id, status: "healthy", events: [], logs: [] };
+        candidateRuns += 1;
+        return {
+          scheduleId: schedule.id,
+          status: "workload_failure",
+          failureReason: "startup failed",
+          failureSignature: {
+            workloadId: "api",
+            assertionId: candidateRuns === 1 ? "database-ready" : "cache-ready",
+            category: "readiness_failed" as const,
+          },
+          events: [],
+          logs: [],
+        };
+      },
+    });
+
+    expect(result).toEqual({ status: "inconclusive", testedSchedules: 3, exploredCandidateSchedules: 1 });
+  });
+
   it("searches, minimizes, and produces a target-bearing artifact from runner evidence", async () => {
     const original: Schedule = {
       id: "schedule-001",

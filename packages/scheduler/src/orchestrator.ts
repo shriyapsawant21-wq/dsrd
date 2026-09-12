@@ -112,6 +112,7 @@ export async function discoverFailure(
     options.target,
     searchResult.failingSchedule,
     searchResult.failureReason,
+    searchResult.failureSignature,
     confirmationRuns - 1,
     runSchedule,
   );
@@ -158,14 +159,30 @@ async function confirmFailure(
   target: TargetConfig,
   schedule: Schedule,
   expectedReason: string | undefined,
+  expectedSignature: RunResult["failureSignature"],
   repeats: number,
   runSchedule: RunSchedule,
 ): Promise<boolean> {
   for (let run = 0; run < repeats; run += 1) {
     const result = await runSchedule(target, schedule);
-    if (result.status !== "workload_failure" || result.failureReason !== expectedReason) return false;
+    if (
+      result.status !== "workload_failure" ||
+      result.failureReason !== expectedReason ||
+      (expectedSignature !== undefined && !sameSignature(expectedSignature, result.failureSignature))
+    ) return false;
   }
   return true;
+}
+
+function sameSignature(
+  expected: NonNullable<RunResult["failureSignature"]>,
+  actual: RunResult["failureSignature"],
+): boolean {
+  return actual !== undefined &&
+    expected.workloadId === actual.workloadId &&
+    expected.assertionId === actual.assertionId &&
+    expected.category === actual.category &&
+    expected.code === actual.code;
 }
 
 export async function replayFailure(

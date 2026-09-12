@@ -14,6 +14,7 @@ export type SearchResult =
       testedSchedules: number;
       failingSchedule: Schedule;
       failureReason?: string;
+      failureSignature?: RunResult["failureSignature"];
       events: TimelineEvent[];
     }
   | {
@@ -57,6 +58,7 @@ export async function searchCandidateStages(
           testedSchedules,
           failingSchedule: schedule,
           failureReason: result.failureReason,
+          ...(result.failureSignature === undefined ? {} : { failureSignature: result.failureSignature }),
           events: result.events
         };
       }
