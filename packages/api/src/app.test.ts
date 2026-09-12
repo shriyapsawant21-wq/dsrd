@@ -36,6 +36,19 @@ it("replays a validated artifact through the injected shared replay operation", 
   expect(response.body).toMatchObject({ status: "reproduced", result: { scheduleId: "minimal" } });
 });
 
+it("starts repository search asynchronously and preserves its terminal outcome", async () => {
+  const store = new RunStore();
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    search: async () => ({ status: "needs_configuration", testedSchedules: 0, exploredCandidateSchedules: 0, diagnostics: [] }),
+  });
+
+  const created = await request(app).post("/api/repositories/search").send({ repository: { kind: "checkout", path: "/project" } });
+
+  expect(created.status).toBe(202);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(store.get(created.body.runId)?.progress).toMatchObject({ phase: "needs_configuration", percentage: 100 });
+});
+
 it("returns an uploaded run and reports that an unfinished artifact is unavailable", async () => {
   const store = new RunStore();
   const app = createApp(store, new RunService(store, async () => new Promise(() => undefined)));

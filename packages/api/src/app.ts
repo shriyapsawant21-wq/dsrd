@@ -3,12 +3,13 @@ import multer from "multer";
 import { RunService } from "./run-service.js";
 import { RunStore } from "./run-store.js";
 import { materializeProject } from "./project-upload.js";
+import type { RunPhase } from "./contracts.js";
 import { failureArtifactSchema, repositoryInputSchema, type FailureArtifact, type InspectionResult, type RepositoryInput, type RunResult } from "@dsrd/contracts";
 
 export type ApiOnboardingOperations = {
   inspect?: (repository: RepositoryInput) => Promise<InspectionResult>;
   replay?: (artifact: FailureArtifact) => Promise<{ status: "reproduced" | "not_reproduced"; result: RunResult }>;
-  search?: (request: { repository: RepositoryInput; targetId?: string; configPath?: string }) => Promise<unknown>;
+  search?: (request: { repository: RepositoryInput; targetId?: string; configPath?: string }) => Promise<{ status: string; testedSchedules?: number; artifact?: FailureArtifact }>;
 };
 
 function summarizeFailures(artifact?: FailureArtifact) {
@@ -43,8 +44,20 @@ export function createApp(store: RunStore, service: RunService, onboarding: ApiO
     if (onboarding.search === undefined) return res.status(501).json({ error: "Repository search is not configured" });
     try {
       const repository = repositoryInputSchema.parse(req.body?.repository);
-      const result = await onboarding.search({ repository, targetId: req.body?.targetId, configPath: req.body?.configPath });
-      return res.status(200).json(result);
+      const run = store.create();
+      void (async () => {
+        store.publish(run.id, { ...run.progress, phase: "exploring", percentage: 10, message: "Inspecting repository" });
+        try {
+          const result = await onboarding.search!({ repository, targetId: req.body?.targetId, configPath: req.body?.configPath });
+          if (result.status === "found_failure" && result.artifact !== undefined) store.setArtifact(run.id, result.artifact);
+          const phase = result.status === "found_failure" ? "completed" : result.status as RunPhase;
+          store.publish(run.id, { ...store.get(run.id)!.progress, phase, percentage: 100, message: phase.replaceAll("_", " "), testedSchedules: result.testedSchedules ?? 0, failureCount: phase === "completed" ? 1 : 0 });
+        } catch (error) {
+          store.setError(run.id, error instanceof Error ? error.message : "Repository search failed");
+          store.publish(run.id, { ...store.get(run.id)!.progress, phase: "error", percentage: 100, message: "Repository search failed", failureCount: 0 });
+        }
+      })();
+      return res.status(202).json({ runId: run.id, status: "queued" });
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid repository search" });
     }
