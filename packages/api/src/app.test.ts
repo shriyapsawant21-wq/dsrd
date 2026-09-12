@@ -58,6 +58,9 @@ it("starts repository search asynchronously and preserves its terminal outcome",
   expect(created.status).toBe(202);
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(store.get(created.body.runId)?.progress).toMatchObject({ phase: "needs_configuration", percentage: 100 });
+  expect((await request(app).get(`/api/runs/${created.body.runId}`)).body).toMatchObject({
+    diagnostics: [],
+  });
 });
 
 it("persists a repository-search artifact and completes its event stream", async () => {

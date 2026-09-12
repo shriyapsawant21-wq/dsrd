@@ -4,12 +4,12 @@ import { RunService } from "./run-service.js";
 import { RunStore } from "./run-store.js";
 import { materializeProject } from "./project-upload.js";
 import type { RunPhase } from "./contracts.js";
-import { failureArtifactSchema, repositoryInputSchema, type FailureArtifact, type InspectionResult, type RepositoryInput, type RunResult } from "@dsrd/contracts";
+import { failureArtifactSchema, repositoryInputSchema, type FailureArtifact, type InspectionResult, type RepositoryInput, type RunDiagnostic, type RunResult } from "@dsrd/contracts";
 
 export type ApiOnboardingOperations = {
   inspect?: (repository: RepositoryInput) => Promise<InspectionResult>;
   replay?: (artifact: FailureArtifact) => Promise<{ status: "reproduced" | "not_reproduced"; result: RunResult }>;
-  search?: (request: { repository: RepositoryInput; targetId?: string; configPath?: string }) => Promise<{ status: string; testedSchedules?: number; artifact?: FailureArtifact }>;
+  search?: (request: { repository: RepositoryInput; targetId?: string; configPath?: string }) => Promise<{ status: string; testedSchedules?: number; artifact?: FailureArtifact; diagnostics?: RunDiagnostic[] }>;
 };
 
 export function isTerminalRunPhase(phase: RunPhase): boolean {
@@ -57,6 +57,7 @@ export function createApp(store: RunStore, service: RunService, onboarding: ApiO
         try {
           const result = await onboarding.search!({ repository, targetId: req.body?.targetId, configPath: req.body?.configPath });
           if (result.status === "found_failure" && result.artifact !== undefined) store.setArtifact(run.id, result.artifact);
+          if (result.diagnostics !== undefined) store.setDiagnostics(run.id, result.diagnostics);
           const phase = result.status === "found_failure" ? "completed" : result.status as RunPhase;
           store.publish(run.id, { ...store.get(run.id)!.progress, phase, percentage: 100, message: phase.replaceAll("_", " "), testedSchedules: result.testedSchedules ?? 0, failureCount: phase === "completed" ? 1 : 0 });
         } catch (error) {
