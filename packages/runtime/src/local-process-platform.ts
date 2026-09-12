@@ -168,6 +168,17 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
           observedAtMs: Date.now(),
         }];
       }
+      if (assertion.type === "http") {
+        if (assertion.target === undefined || !isHttpUrl(assertion.target)) {
+          return [{ workload: workload.id, kind: "http", status: "unhealthy", observedAtMs: Date.now(), detail: "HTTP readiness target must be an http(s) URL" }];
+        }
+        return [await probeHttpReadiness(
+          workload.id,
+          assertion.target,
+          this.options.readinessTimeoutMs ?? 5_000,
+          this.options.readinessPollIntervalMs ?? 100,
+        )];
+      }
       if (assertion.type !== "tcp" || assertion.target === undefined) return [];
       const target = parseTcpTarget(assertion.target);
       if (target === undefined) {
@@ -250,6 +261,45 @@ function parseTcpTarget(input: string): { host: string; port: number } | undefin
   const host = input.slice(0, separator);
   const port = Number(input.slice(separator + 1));
   return Number.isInteger(port) && port > 0 && port <= 65_535 ? { host, port } : undefined;
+}
+
+function isHttpUrl(input: string): boolean {
+  try {
+    const url = new URL(input);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+async function probeHttpReadiness(
+  workload: string,
+  url: string,
+  timeoutMs: number,
+  pollIntervalMs: number,
+): Promise<LocalProcessReadiness> {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    if (await respondsSuccessfully(url, Math.min(pollIntervalMs, Math.max(1, deadline - Date.now())))) {
+      return { workload, kind: "http", status: "ready", observedAtMs: Date.now() };
+    }
+    const remainingMs = deadline - Date.now();
+    if (remainingMs > 0) await wait(Math.min(pollIntervalMs, remainingMs));
+  } while (Date.now() < deadline);
+  return { workload, kind: "http", status: "timeout", observedAtMs: Date.now() };
+}
+
+async function respondsSuccessfully(url: string, timeoutMs: number): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal, redirect: "error" });
+    return response.status >= 200 && response.status < 300;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function probeTcpReadiness(

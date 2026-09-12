@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createServer } from "node:net";
 import { describe, expect, it } from "vitest";
 import type { RunResult } from "@dsrd/contracts";
 import { WorkloadProofObserver } from "@dsrd/proof";
@@ -179,4 +180,51 @@ describe("LocalProcessExecutionPlatform", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("reports HTTP readiness once the declared endpoint responds", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-local-http-readiness-"));
+    const manifest = join(directory, "manifest.json");
+    const port = await availablePort();
+    await writeFile(manifest, JSON.stringify({
+      workloads: [
+        { id: "server", kind: "process", perturbablePhases: [], readiness: { type: "http", target: `http://127.0.0.1:${port}/ready` }, command: [process.execPath, "-e", `require('node:http').createServer((_request, response) => response.end('ready')).listen(${port})`] },
+        { id: "gate", kind: "job", perturbablePhases: [], command: [process.execPath, "-e", "setTimeout(() => process.exit(0), 100)"] },
+      ],
+    }));
+    const observations: LocalProcessObservation[] = [];
+    try {
+      const platform = new LocalProcessExecutionPlatform({
+        readinessTimeoutMs: 500,
+        readinessPollIntervalMs: 5,
+        observer: { evaluate: async (snapshot) => {
+          observations.push(snapshot);
+          return { scheduleId: snapshot.scheduleId, status: "healthy", events: [], logs: [] };
+        } },
+      });
+      await platform.run({ platform: "local-process", manifestPath: manifest }, { id: "http-ready", perturbations: [] });
+
+      expect(observations[0]?.readiness).toContainEqual(expect.objectContaining({
+        workload: "server",
+        kind: "http",
+        status: "ready",
+      }));
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 });
+
+function availablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (typeof address === "string" || address === null) {
+        server.close(() => reject(new Error("Unable to allocate a local test port")));
+        return;
+      }
+      server.close((error) => error === undefined ? resolve(address.port) : reject(error));
+    });
+  });
+}
