@@ -163,6 +163,22 @@ describe("C3 workload proof evidence", () => {
     );
   });
 
+  it("keeps a generic connection-refused log as diagnostic evidence", async () => {
+    const snapshot = passingSnapshot();
+    snapshot.states = snapshot.states.map((state) =>
+      state.workload === "catalog-http" ? { ...state, state: "missing" } : state,
+    );
+    snapshot.logs = ["catalog-http | ECONNREFUSED while dependency starts"];
+
+    const result = await new WorkloadProofObserver().evaluate(snapshot);
+
+    expect(result.status).toBe("inconclusive");
+    expect(result.events).toContainEqual(expect.objectContaining({
+      service: "catalog-http",
+      event: "log_connection_refused",
+    }));
+  });
+
   it("prefers workload identity in platform-neutral structured logs", async () => {
     const snapshot = passingSnapshot();
     snapshot.states = snapshot.states.map((state) =>

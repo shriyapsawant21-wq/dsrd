@@ -86,12 +86,12 @@ export type RunResult = {
 - `parseLogEvidence()` returns timeline diagnostics for generic connection/timeout text but no proof-failure input for those strings.
 - `evaluateWorkloadRun()` returns `healthy`, `workload_failure`, or `inconclusive` from workload state, declared readiness, and structured application events.
 
-- [ ] Add a test proving a single `ECONNREFUSED` or `timeout` log with otherwise incomplete evidence returns `inconclusive` and keeps a timeline event.
-- [ ] Run that test and confirm the existing log-failure branch returns `fail`.
-- [ ] Remove generic log categories from the failure decision while preserving their event parsing.
-- [ ] Add tests for non-zero exit, failed health/readiness, and explicit structured failure event returning `workload_failure`; add a complete successful fixture returning `healthy`.
-- [ ] Run `npx vitest run packages/proof/test/log-parser.test.ts packages/proof/test/workload-evidence.test.ts` and `npm run typecheck --workspace=@dsrd/proof`.
-- [ ] Commit `feat(proof): require machine-verifiable failures`.
+- [x] Add a test proving a single `ECONNREFUSED` or `timeout` log with otherwise incomplete evidence returns `inconclusive` and keeps a timeline event.
+- [x] Run that test and confirm the existing log-failure branch returns `workload_failure`.
+- [x] Remove generic log categories from the failure decision while preserving their event parsing.
+- [x] Add tests for non-zero exit, failed health/readiness, and explicit structured failure event returning `workload_failure`; add a complete successful fixture returning `healthy`.
+- [x] Run `npx vitest run packages/proof/test/log-parser.test.ts packages/proof/test/workload-evidence.test.ts` and `npm run typecheck --workspace=@dsrd/proof`.
+- [x] Commit `feat(proof): require machine-verifiable failures`.
 
 ### Task 4: Prepare and isolate Compose execution
 
