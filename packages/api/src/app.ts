@@ -4,7 +4,7 @@ import { RunService } from "./run-service.js";
 import { RunStore } from "./run-store.js";
 import { materializeProject } from "./project-upload.js";
 import type { RunPhase } from "./contracts.js";
-import { failureArtifactSchema, repositoryInputSchema, type FailureArtifact, type InspectionResult, type RepositoryInput, type RunDiagnostic, type RunResult } from "@dsrd/contracts";
+import { failureArtifactSchema, redactSecrets, repositoryInputSchema, type FailureArtifact, type InspectionResult, type RepositoryInput, type RunDiagnostic, type RunResult } from "@dsrd/contracts";
 
 export type ApiOnboardingOperations = {
   inspect?: (repository: RepositoryInput) => Promise<InspectionResult>;
@@ -35,7 +35,7 @@ export function createApp(store: RunStore, service: RunService, onboarding: ApiO
       const inspection = await onboarding.inspect(repositoryInputSchema.parse(req.body?.repository));
       return res.status(200).json({ status: "inspected", inspection });
     } catch (error) {
-      return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid repository input" });
+      return res.status(400).json({ error: redactSecrets(error instanceof Error ? error.message : "Invalid repository input") });
     }
   });
   app.post("/api/replay", async (req, res) => {
@@ -44,7 +44,7 @@ export function createApp(store: RunStore, service: RunService, onboarding: ApiO
       const result = await onboarding.replay(failureArtifactSchema.parse(req.body?.artifact));
       return res.status(200).json(result);
     } catch (error) {
-      return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid replay artifact" });
+      return res.status(400).json({ error: redactSecrets(error instanceof Error ? error.message : "Invalid replay artifact") });
     }
   });
   app.post("/api/repositories/search", async (req, res) => {
@@ -67,7 +67,7 @@ export function createApp(store: RunStore, service: RunService, onboarding: ApiO
       })();
       return res.status(202).json({ runId: run.id, status: "queued" });
     } catch (error) {
-      return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid repository search" });
+      return res.status(400).json({ error: redactSecrets(error instanceof Error ? error.message : "Invalid repository search") });
     }
   });
   app.post("/api/runs", upload.array("projectFiles", 200), async (req, res) => {
@@ -80,7 +80,7 @@ export function createApp(store: RunStore, service: RunService, onboarding: ApiO
       void service.start(run.id, target);
       return res.status(202).json({ runId: run.id, status: "queued" });
     } catch (error) {
-      return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid project upload" });
+      return res.status(400).json({ error: redactSecrets(error instanceof Error ? error.message : "Invalid project upload") });
     }
   });
   app.get("/api/runs/:runId", (req, res) => {

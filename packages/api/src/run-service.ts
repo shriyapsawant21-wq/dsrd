@@ -1,5 +1,5 @@
 import type { RunPhase } from "./contracts.js";
-import type { FailureArtifact, TargetConfig } from "@dsrd/contracts";
+import { redactSecrets, type FailureArtifact, type TargetConfig } from "@dsrd/contracts";
 import { RunStore } from "./run-store.js";
 
 export type DiscoveryRunner = (target: TargetConfig, onProgress: (testedSchedules: number, totalSchedules: number) => void) => Promise<
@@ -20,7 +20,7 @@ export class RunService {
       this.store.publish(runId, { ...this.require(runId).progress, testedSchedules: result.testedSchedules ?? 0 });
       this.publishTerminal(runId, result.status, terminalMessage(result.status));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Run failed";
+      const message = redactSecrets(error instanceof Error ? error.message : "Run failed");
       this.store.setError(runId, message);
       this.publishTerminal(runId, "error", message);
     }

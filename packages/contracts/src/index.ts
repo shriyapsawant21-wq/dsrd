@@ -78,3 +78,4 @@ export { failureArtifactSchema, failureArtifactV2Schema, failureArtifactV3Schema
 export type { AppliedPerturbation, AttemptContext, AttemptHandle, CleanupReport, PreparedTarget, WorkloadCapability, WorkloadModel } from "./execution.js";
 export { defaultExperimentPolicy, experimentPolicySchema, inspectionResultSchema, parseProjectConfig, projectConfigSchema, repositoryInputSchema, runDiagnosticSchema, targetCandidateSchema } from "./repository.js";
 export type { ExperimentPolicy, InspectionResult, ProjectConfig, ReadinessAssertion, RepositoryInput, RepositorySnapshot, TargetCandidate, WorkloadConfig } from "./repository.js";
+export { redactSecrets } from "./redaction.js";

@@ -2,8 +2,7 @@ import { createHash } from "node:crypto";
 import { access, constants } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import type { ExecutionPlatform, FailureArtifact, FailureArtifactV3, RepositoryInput, RunDiagnostic, Schedule, TargetCandidate, TargetConfig } from "@dsrd/contracts";
-import { defaultExperimentPolicy } from "@dsrd/contracts";
+import { defaultExperimentPolicy, redactSecrets, type ExecutionPlatform, type FailureArtifact, type FailureArtifactV3, type RepositoryInput, type RunDiagnostic, type Schedule, type TargetCandidate, type TargetConfig } from "@dsrd/contracts";
 import { disposeRepository, inspectRepository, loadProjectConfig, resolveRepository, selectTarget, snapshotRepository, type RepositoryWorkspace } from "@dsrd/discovery";
 
 import { generateCandidates, type CandidateStage } from "./candidates.js";
@@ -159,4 +158,4 @@ function digest(value: unknown): string { return createHash("sha256").update(JSO
 async function exists(path: string): Promise<boolean> { try { await access(path, constants.R_OK); return true; } catch { return false; } }
 function configurationRequired(message: string): OnboardingOutcome { return { status: "needs_configuration", testedSchedules: 0, exploredCandidateSchedules: 0, diagnostics: [{ code: "configuration_required", message }] }; }
 function unsupported(message: string): OnboardingOutcome { return { status: "unsupported_target", testedSchedules: 0, exploredCandidateSchedules: 0, diagnostics: [{ code: "unsupported_target", message }] }; }
-function executionError(error: unknown): OnboardingOutcome { return { status: "execution_error", testedSchedules: 0, exploredCandidateSchedules: 0, diagnostics: [{ code: "onboarding_execution_error", message: error instanceof Error ? error.message : "onboarding execution failed" }] }; }
+function executionError(error: unknown): OnboardingOutcome { return { status: "execution_error", testedSchedules: 0, exploredCandidateSchedules: 0, diagnostics: [{ code: "onboarding_execution_error", message: redactSecrets(error instanceof Error ? error.message : "onboarding execution failed") }] }; }

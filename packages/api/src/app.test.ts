@@ -22,6 +22,18 @@ it("closes repository event streams for every terminal outcome", () => {
   expect(isTerminalRunPhase("exploring")).toBe(false);
 });
 
+it("redacts secrets from API errors", async () => {
+  const store = new RunStore();
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    inspect: async () => { throw new Error("token=super-secret"); },
+  });
+
+  const response = await request(app).post("/api/repositories/inspect").send({ repository: { kind: "checkout", path: "/project" } });
+  expect(response.status).toBe(400);
+  expect(JSON.stringify(response.body)).not.toContain("super-secret");
+  expect(JSON.stringify(response.body)).toContain("[REDACTED]");
+});
+
 it("inspects a repository input through the injected onboarding operation", async () => {
   const store = new RunStore();
   const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {

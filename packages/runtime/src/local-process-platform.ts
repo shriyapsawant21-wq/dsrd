@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection } from "node:net";
 import { resolve } from "node:path";
 
-import type { ExecutionPlatform, RunResult, Schedule, TargetConfig, Workload } from "@dsrd/contracts";
+import { redactSecrets, type ExecutionPlatform, type RunResult, type Schedule, type TargetConfig, type Workload } from "@dsrd/contracts";
 
 import { loadLocalProcessManifest, type LoadedLocalProcessManifest, type LocalProcessWorkload } from "./local-process-manifest.js";
 
@@ -92,7 +92,7 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
         logs: [],
         diagnostics: [{
           code: "local_process_execution_error",
-          message: error instanceof Error ? error.message : "Local-process execution failed",
+          message: redactSecrets(error instanceof Error ? error.message : "Local-process execution failed"),
         }],
       };
     } finally {
@@ -108,7 +108,7 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
             logs: [],
             diagnostics: [{
               code: "local_process_execution_error",
-              message: error instanceof Error ? error.message : "Local-process cleanup failed",
+              message: redactSecrets(error instanceof Error ? error.message : "Local-process cleanup failed"),
             }],
           };
         }
@@ -177,8 +177,8 @@ export class LocalProcessExecutionPlatform implements ExecutionPlatform {
       detached: process.platform !== "win32",
     });
     this.activeChildren.add(child);
-    child.stdout?.on("data", (data: Buffer) => logs.push(`${workload.id}: ${data.toString().trimEnd()}`));
-    child.stderr?.on("data", (data: Buffer) => logs.push(`${workload.id}: ${data.toString().trimEnd()}`));
+    child.stdout?.on("data", (data: Buffer) => logs.push(`${workload.id}: ${redactSecrets(data.toString().trimEnd())}`));
+    child.stderr?.on("data", (data: Buffer) => logs.push(`${workload.id}: ${redactSecrets(data.toString().trimEnd())}`));
     child.once("close", () => this.activeChildren.delete(child));
     return child;
   }
