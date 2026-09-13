@@ -193,6 +193,16 @@ For the supplied local Kind fixture, create/select the `kind-dsrd-c7` context
 before running the Kubernetes command. No cluster is needed for Compose or
 local-process workflows.
 
+To run the opt-in Kubernetes conformance flow with an explicit kubeconfig:
+
+```bash
+KUBECONFIG=/path/to/kubeconfig KUBERNETES_C7_INTEGRATION=1 \
+  npx vitest run packages/scheduler/src/kubernetes-kind.integration.test.ts
+```
+
+It creates and removes only the fixture's `dsrd-kubernetes-race` namespace;
+the selected Kind cluster is never deleted.
+
 ## Usage
 
 ### Interactive mode

@@ -33,7 +33,16 @@ replay, stable JSON terminal records, and malformed input. The API suite covers
 asynchronous repository search, artifact persistence, report retrieval, replay,
 and terminal SSE closure.
 
-Kubernetes conformance is optional and requires both `kubectl` and `kind`, plus
-a disposable Kind cluster selected by the fixture. This checkout has `kubectl`
-available but no `kind` executable, so Kind-gated tests remain intentionally
-skipped; this is an environment prerequisite, not a passing Kubernetes claim.
+Kubernetes conformance is optional and requires `kubectl`, `kind`, and a
+disposable Kind cluster. Select the `kind-dsrd-c7` context (or provide its
+kubeconfig) and run:
+
+```bash
+KUBECONFIG=/path/to/kubeconfig KUBERNETES_C7_INTEGRATION=1 \
+  npx vitest run packages/scheduler/src/kubernetes-kind.integration.test.ts
+```
+
+The fixture owns only the `dsrd-kubernetes-race` namespace and removes that
+namespace after each test; it never creates or deletes the selected cluster.
+The test is opt-in so ordinary unit and Compose development remains
+cluster-free.
