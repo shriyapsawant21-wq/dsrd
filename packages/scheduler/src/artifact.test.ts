@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -18,6 +18,23 @@ afterEach(async () => {
 });
 
 describe("failure artifacts", () => {
+  it("redacts secrets before persisting artifact text", async () => {
+    const path = join(tmpdir(), "dsrd-redacted-artifact.json");
+    await saveFailureArtifact(path, {
+      version: 2,
+      createdAt: new Date(0).toISOString(),
+      target: { platform: "local-process", manifestPath: "manifest.json" },
+      originalSchedule: { id: "original", perturbations: [] },
+      minimizedSchedule: { id: "minimal", perturbations: [] },
+      expectedFailureReason: "token=super-secret",
+      events: [{ timeMs: 1, service: "api", event: "failed", detail: "Bearer top-secret" }],
+    });
+    const contents = await readFile(path, "utf8");
+    expect(contents).not.toContain("super-secret");
+    expect(contents).not.toContain("top-secret");
+    await rm(path, { force: true });
+  });
+
   it("persists and validates the shared failure artifact shape", async () => {
     const artifact = createFailureArtifact({
       createdAt: "2026-08-29T00:00:00.000Z",

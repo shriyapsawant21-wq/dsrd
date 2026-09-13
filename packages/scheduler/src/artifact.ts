@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-import { failureArtifactSchema, failureArtifactV2Schema, failureArtifactV3Schema, type FailureArtifact, type FailureArtifactV2, type FailureArtifactV3 } from "@dsrd/contracts";
+import { failureArtifactSchema, failureArtifactV2Schema, failureArtifactV3Schema, redactSecrets, type FailureArtifact, type FailureArtifactV2, type FailureArtifactV3 } from "@dsrd/contracts";
 
 export { failureArtifactSchema };
 
@@ -25,7 +25,7 @@ export async function saveFailureArtifact(
   artifact: FailureArtifact
 ): Promise<void> {
   const validated = failureArtifactSchema.parse(artifact);
-  await writeFile(path, `${JSON.stringify(validated, null, 2)}\n`, "utf8");
+  await writeFile(path, `${redactSecrets(JSON.stringify(validated, null, 2))}\n`, "utf8");
 }
 
 export async function loadFailureArtifact(path: string): Promise<FailureArtifact> {
