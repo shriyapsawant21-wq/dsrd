@@ -179,6 +179,32 @@ describe("race-debugger CLI", () => {
     expect(calls).toBe(1);
   });
 
+  it("keeps every discovery terminal status on its documented JSON exit code", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-terminal-status-"));
+    directories.push(directory);
+    await writeFile(join(directory, "manifest.json"), "{}\n");
+    const cases = [
+      ["no_failure", 0],
+      ["needs_configuration", 2],
+      ["unsupported_target", 3],
+      ["target_unhealthy", 4],
+      ["execution_error", 5],
+      ["inconclusive", 6],
+      ["cancelled", 130],
+    ] as const;
+
+    for (const [status, expectedExitCode] of cases) {
+      const output: string[] = [];
+      await expect(runCli(["search", "--target", directory, "--json"], {
+        platform: fakePlatform,
+        log: (message) => output.push(message),
+        sharedDiscovery: async () => ({ status, testedSchedules: 0, exploredCandidateSchedules: 0 }),
+      })).resolves.toBe(expectedExitCode);
+      expect(output).toHaveLength(1);
+      expect(JSON.parse(output[0]!)).toMatchObject({ status, exitCode: expectedExitCode });
+    }
+  });
+
   it("resolves a Compose project directory to its conventional compose file", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-project-"));
     directories.push(directory);
