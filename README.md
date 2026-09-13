@@ -112,6 +112,57 @@ Exactly one of `--checkout` and `--git` is required. `--ref` defaults to
 `HEAD`, but a commit hash is the most reproducible choice. Do not place
 credentials in a Git URL, command line, configuration, or artifact.
 
+### Test pinned Git acquisition with 100 demo repositories
+
+The following POSIX shell example creates 100 disposable local Git
+repositories. Each repository contains valid local-process metadata, makes a
+real commit, and is inspected through the same pinned `--git --ref` path used
+for public repositories. The repositories live under a temporary directory and
+are removed when the script exits:
+
+```bash
+set -eu
+
+demo_root="$(mktemp -d "${TMPDIR:-/tmp}/dsrd-git-demos.XXXXXX")"
+trap 'rm -rf "$demo_root"' EXIT
+
+for number in $(seq -w 1 100); do
+  repository="$demo_root/repository-$number"
+  mkdir -p "$repository"
+
+  printf '%s\n' '{"workloads":[{"id":"api","kind":"service","command":["node","server.js"]}]}' \
+    > "$repository/manifest.json"
+  printf '%s\n' '// onboarding fixture; inspection does not execute this file' \
+    > "$repository/server.js"
+
+  git init -q "$repository"
+  git -C "$repository" config user.name "DSRD Demo"
+  git -C "$repository" config user.email "dsrd-demo@example.invalid"
+  git -C "$repository" add manifest.json server.js
+  git -C "$repository" commit -q -m "Add onboarding fixture"
+
+  revision="$(git -C "$repository" rev-parse HEAD)"
+  race-debugger inspect \
+    --git "file://$repository" \
+    --ref "$revision" \
+    --json > "$demo_root/repository-$number.json"
+
+  node -e '
+    const fs = require("node:fs");
+    const result = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    if (result.status !== "inspected" || !result.candidates.length) process.exit(1);
+  ' "$demo_root/repository-$number.json"
+done
+
+printf 'Inspected 100 pinned Git repositories under %s\n' "$demo_root"
+```
+
+This verifies Git URL validation, detached-ref acquisition, read-only snapshot
+handling, repository disposal, inspection JSON shape, and local cleanup at a
+repeatable scale. It does not run application commands or claim that all 100
+repositories contain a reproducible race; use a complete `dsrd.yaml` and
+`onboard-search` on an individual fixture when testing execution.
+
 Replay always uses the same shared platform/oracle boundary as discovery:
 
 ```bash
