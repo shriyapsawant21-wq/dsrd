@@ -247,6 +247,7 @@ export async function runCli(
     .description("replay a saved failure artifact")
     .option("--json", "emit one machine-readable terminal result")
     .action(async (artifactPath: string, options: { json?: boolean }) => {
+      try {
       const artifact = await loadFailureArtifact(artifactPath);
       const result = await replayFailure(artifact, replaySchedule);
       exitCode = result.status === "reproduced" ? 0 : 4;
@@ -266,6 +267,11 @@ export async function runCli(
         dependencies.useColor,
         evidenceMatched
       ));
+      } catch (error) {
+        if (!options.json) throw error;
+        exitCode = 5;
+        dependencies.log(JSON.stringify({ status: "execution_error", exitCode }));
+      }
     });
 
   if (args.length === 0) {

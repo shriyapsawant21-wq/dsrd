@@ -73,6 +73,22 @@ describe("race-debugger CLI", () => {
     expect(JSON.parse(output[0]!)).toMatchObject({ status: "execution_error", exitCode: 5 });
   });
 
+  it("emits one JSON terminal error for a malformed replay artifact", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-replay-json-"));
+    directories.push(directory);
+    const artifactPath = join(directory, "failure.json");
+    await writeFile(artifactPath, "{not valid JSON");
+    const output: string[] = [];
+
+    await expect(runCli(["replay", artifactPath, "--json"], {
+      platform: fakePlatform,
+      log: (message) => output.push(message),
+    })).resolves.toBe(5);
+
+    expect(output).toHaveLength(1);
+    expect(JSON.parse(output[0]!)).toMatchObject({ status: "execution_error", exitCode: 5 });
+  });
+
   it("inspects a checkout through the onboarding service in JSON mode", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-inspect-"));
     directories.push(directory);
