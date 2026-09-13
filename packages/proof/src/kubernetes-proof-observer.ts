@@ -8,6 +8,7 @@ export type KubernetesObservation = {
   states: Array<{ workload: string; state: "running" | "exited" | "missing"; exitCode?: number; health?: string; observedAtMs: number }>;
   logs: string[];
   events: Array<{ workload: string; timeMs: number; event: string; detail?: string }>;
+  refresh?: () => Promise<Pick<KubernetesObservation, "states" | "logs">>;
 };
 
 export class KubernetesProofObserver {
@@ -21,6 +22,7 @@ export class KubernetesProofObserver {
   }
 
   evaluate(snapshot: KubernetesObservation) {
+    const refresh = snapshot.refresh;
     return this.observer.evaluate({
       scheduleId: snapshot.scheduleId,
       startedAtMs: snapshot.startedAtMs,
@@ -29,6 +31,12 @@ export class KubernetesProofObserver {
       readiness: [],
       workloadEvents: snapshot.events,
       logs: snapshot.logs,
+      ...(refresh === undefined ? {} : {
+        refresh: async () => ({
+          ...(await refresh()),
+          readiness: [],
+        }),
+      }),
     });
   }
 }

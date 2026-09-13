@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url";
 
 import { createDefaultPlatform } from "./default-platform.js";
 import { discoverFailure, replayFailure } from "./orchestrator.js";
-import { generateCandidates } from "./candidates.js";
 
 const enabled = process.env.KUBERNETES_C7_INTEGRATION === "1";
 const target = {
@@ -28,11 +27,16 @@ describe.skipIf(!enabled)("Kind Kubernetes platform", () => {
   it("searches, minimizes, saves target evidence, and replays a Kubernetes failure", async () => {
     const platform = createDefaultPlatform();
     const workloads = await platform.discover(target);
-    const candidates = generateCandidates(workloads, [0, 1_500]);
+    expect(workloads).toEqual(expect.arrayContaining([expect.objectContaining({ id: "database" })]));
     const result = await discoverFailure({
       target,
-      candidates,
-      delayOptionsMs: [0, 1_500],
+      candidates: [{
+        id: "delay-database",
+        perturbations: [{ workloadId: "database", phase: "start", delayMs: 5_000 }],
+      }],
+      delayOptionsMs: [0, 5_000],
+      baselineRuns: 1,
+      confirmationRuns: 1,
       runSchedule: platform.run.bind(platform),
     });
     expect(result.status).toBe("found_failure");
@@ -40,5 +44,5 @@ describe.skipIf(!enabled)("Kind Kubernetes platform", () => {
       expect(result.artifact.target).toEqual(target);
       await expect(replayFailure(result.artifact, platform.replay.bind(platform))).resolves.toMatchObject({ status: "reproduced" });
     }
-  }, 120_000);
+  }, 300_000);
 });

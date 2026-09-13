@@ -68,6 +68,7 @@ export type KubernetesRunSnapshot = {
   states: Array<{ workload: string; state: "running" | "exited" | "missing"; exitCode?: number; health?: string; observedAtMs: number }>;
   logs: string[];
   events: Array<{ workload: string; timeMs: number; event: string; detail?: string }>;
+  refresh?: () => Promise<Pick<KubernetesRunSnapshot, "states" | "logs">>;
 };
 
 export interface KubernetesRunObserver {
@@ -107,7 +108,14 @@ export class KubectlKubernetesExecutor implements KubernetesScheduleExecutor {
     }));
     if (this.options.observer !== undefined) {
       await new Promise<void>((resolve) => setTimeout(resolve, this.options.settleMs ?? 1_500));
-      return this.options.observer.evaluate(await this.observe(schedule.id, _workloadOrder, startedAtMs));
+      const snapshot = await this.observe(schedule.id, _workloadOrder, startedAtMs);
+      return this.options.observer.evaluate({
+        ...snapshot,
+        refresh: async () => {
+          const refreshed = await this.observe(schedule.id, _workloadOrder, startedAtMs);
+          return { states: refreshed.states, logs: refreshed.logs };
+        },
+      });
     }
     if (this.options.evaluate !== undefined) return this.options.evaluate(schedule.id);
     throw new Error("Kubernetes executor requires an observer or evaluator");
