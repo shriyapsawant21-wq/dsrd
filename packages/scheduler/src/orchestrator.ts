@@ -154,26 +154,36 @@ export async function discoverFailure(
   if (options.artifactV3 !== undefined && options.replaySchedule === undefined) {
     return { status: "inconclusive", testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
   }
-  const artifact: FailureArtifact = options.artifactV3 === undefined
-    ? createFailureArtifact({
-      createdAt: options.createdAt ?? new Date().toISOString(),
-      target: options.target,
-      originalSchedule: searchResult.failingSchedule,
-      minimizedSchedule,
-      expectedFailureReason: minimizedRun.failureReason,
-      events: minimizedRun.events,
-    })
-    : createVerifiedFailureArtifact({
-      ...options.artifactV3,
-      signature: searchResult.failureSignature!,
-      orderingConstraints: options.artifactV3.orderingConstraints ?? orderingConstraints(minimizedRun.events),
-      createdAt: options.createdAt ?? new Date().toISOString(),
-      target: options.target,
-      originalSchedule: searchResult.failingSchedule,
-      minimizedSchedule,
-      expectedFailureReason: minimizedRun.failureReason,
-      events: minimizedRun.events,
-    });
+  let artifact: FailureArtifact;
+  try {
+    artifact = options.artifactV3 === undefined
+      ? createFailureArtifact({
+        createdAt: options.createdAt ?? new Date().toISOString(),
+        target: options.target,
+        originalSchedule: searchResult.failingSchedule,
+        minimizedSchedule,
+        expectedFailureReason: minimizedRun.failureReason,
+        events: minimizedRun.events,
+      })
+      : createVerifiedFailureArtifact({
+        ...options.artifactV3,
+        signature: searchResult.failureSignature!,
+        orderingConstraints: options.artifactV3.orderingConstraints ?? orderingConstraints(minimizedRun.events),
+        createdAt: options.createdAt ?? new Date().toISOString(),
+        target: options.target,
+        originalSchedule: searchResult.failingSchedule,
+        minimizedSchedule,
+        expectedFailureReason: minimizedRun.failureReason,
+        events: minimizedRun.events,
+      });
+  } catch {
+    return {
+      status: "execution_error",
+      testedSchedules: executions,
+      exploredCandidateSchedules: searchResult.testedSchedules,
+      diagnostics: [{ code: "artifact_validation_failed", message: "Verified artifact provenance is incomplete or invalid" }],
+    };
+  }
   if (options.replaySchedule !== undefined) {
     const replayRuns = artifact.version === 3 ? artifact.verification.replayRuns : 1;
     for (let run = 0; run < replayRuns; run += 1) {

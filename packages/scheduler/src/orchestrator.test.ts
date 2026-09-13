@@ -153,6 +153,32 @@ describe("orchestration", () => {
     expect(result).toMatchObject({ status: "found_failure", artifact: { version: 3, signature: { assertionId: "startup" } } });
   });
 
+  it("suppresses v3 publication when provenance metadata is incomplete", async () => {
+    const context = verifiedArtifactContext({ workloadId: "api", assertionId: "startup", category: "structured_failure" });
+    context.repository.contentDigest = "";
+    const result = await discoverFailure({
+      candidates: [{ id: "failing", perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }] }],
+      delayOptionsMs: [0, 1000],
+      target,
+      baselineRuns: 1,
+      confirmationRuns: 1,
+      runSchedule: async (_target, schedule) => ({
+        ...fakeRun(schedule),
+        ...(schedule.perturbations.length === 0 ? {} : {
+          failureSignature: { workloadId: "api", assertionId: "startup", category: "structured_failure" as const },
+        }),
+      }),
+      replaySchedule: async (_target, schedule) => ({
+        ...fakeRun(schedule),
+        failureSignature: { workloadId: "api", assertionId: "startup", category: "structured_failure" as const },
+      }),
+      artifactV3: context,
+    });
+
+    expect(result).toMatchObject({ status: "execution_error" });
+    expect(result).not.toHaveProperty("artifact");
+  });
+
   it("does not publish a v3 artifact when minimization changes the structured failure signature", async () => {
     const result = await discoverFailure({
       candidates: [{ id: "failing", perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }] }],
