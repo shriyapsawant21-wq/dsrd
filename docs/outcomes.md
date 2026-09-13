@@ -16,3 +16,11 @@ Outcome classification is evidence-first.
 `ECONNREFUSED`, `timeout`, and comparable log text are diagnostic timeline
 evidence only. A failure requires an unexpected terminal exit, failed declared
 readiness assertion, structured application failure, or terminal job mismatch.
+
+CLI JSON mode emits one terminal record with `status` and `exitCode` and no
+progress noise. Discovery outcomes map to process codes: `0` for
+`found_failure`/`no_failure`, `2` for `needs_configuration`, `3` for
+`unsupported_target`, `4` for `target_unhealthy`, `5` for `execution_error`,
+`6` for `inconclusive`, and `130` for `cancelled`. JSON setup errors also use
+the stable `execution_error`/`5` pair; they are never reclassified as
+`no_failure`.

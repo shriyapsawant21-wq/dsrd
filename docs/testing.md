@@ -20,3 +20,15 @@ for the current checkout—never include nested worktrees or build output.
 
 Repository-search API tests verify that terminal SSE events retain tested
 schedule counts and redacted diagnostics, then close for every terminal phase.
+
+Run the opt-in Docker Compose conformance check when Docker Engine and the
+Compose plugin are both available:
+
+```bash
+DSRD_DOCKER_CONFORMANCE=1 npx vitest run packages/runtime/test/compose.conformance.test.ts
+```
+
+The focused CLI suite covers checkout and pinned-Git onboarding, inspection,
+replay, stable JSON terminal records, and malformed input. The API suite covers
+asynchronous repository search, artifact persistence, report retrieval, replay,
+and terminal SSE closure.

@@ -18,6 +18,8 @@ handles acquisition, bounded read-only inspection, configuration, target
 selection, and source identity. Runtime adapters own Docker, processes, and
 Kubernetes lifecycle operations. Scheduler owns bounded search and
 minimization; proof owns deterministic observations and failure classification.
+CLI and HTTP API are thin clients of the same onboarding/discovery/replay
+orchestration; neither independently implements replay semantics.
 
 Existing v2 schedules, timeline events, run results, and artifacts remain
 compatible. New evidence fields are optional until all producers migrate. A v2

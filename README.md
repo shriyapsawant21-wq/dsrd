@@ -127,6 +127,35 @@ See [configuration.md](docs/configuration.md), [outcomes.md](docs/outcomes.md),
 and [operations.md](docs/operations.md) for the complete contract and safety
 rules.
 
+## Public onboarding commands and API
+
+Inspect without executing a package script, then search either a checkout or a
+pinned Git revision. Exactly one of `--checkout` and `--git` is required for a
+search; Git acquisition resolves the supplied ref before the detached snapshot
+is used.
+
+```bash
+race-debugger inspect --checkout ./example --json
+race-debugger onboard-search --checkout ./example --json --output failure.json
+race-debugger onboard-search --git https://example.invalid/project.git --ref <commit> --json
+race-debugger replay failure.json --json
+```
+
+`--json` writes exactly one terminal JSON object and no progress output. The
+stable discovery exit codes are `0` (`found_failure` or `no_failure`), `2`
+(`needs_configuration`), `3` (`unsupported_target`), `4`
+(`target_unhealthy`), `5` (`execution_error`), `6` (`inconclusive`), and `130`
+(`cancelled`). Malformed direct-search, onboarding, inspection, and replay
+inputs return the same JSON `execution_error`/exit-code-5 terminal record.
+
+The HTTP API exposes `POST /api/repositories/inspect`, `POST
+/api/repositories/search`, and `POST /api/replay`. Repository search returns
+`202` with a run ID and shares the same orchestration service as the CLI. Poll
+`GET /api/runs/:runId`, subscribe to `GET /api/runs/:runId/events`, and obtain
+a verified artifact at `GET /api/runs/:runId/report`. The event stream closes
+after every terminal phase; errors, diagnostics, and JSON responses redact
+secret values.
+
 ## Why use DSRD
 
 DSRD changes execution timing and relies on deterministic runtime evidence from

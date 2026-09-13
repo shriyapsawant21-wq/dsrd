@@ -16,3 +16,10 @@ artifact publication.
 Public API terminal events include the tested-schedule count and sanitized
 diagnostics. Consumers can use stream closure as the terminal signal, then
 fetch the run record or persisted artifact.
+
+`POST /api/repositories/search` creates an asynchronous run and returns `202`.
+It uses the same onboarding orchestration as the CLI. `GET /api/runs/:runId`
+returns its current or terminal record, `GET /api/runs/:runId/events` closes on
+every terminal phase, and `GET /api/runs/:runId/report` returns only a persisted
+verified artifact. `POST /api/repositories/inspect` is read-only; `POST
+/api/replay` uses the shared replay service.

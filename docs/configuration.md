@@ -32,3 +32,8 @@ Compose targets require launch files. Local long-running workloads require an
 explicit readiness assertion. A target with missing launch commands, readiness,
 secrets, or safe reset behavior returns `needs_configuration`; DSRD must not
 guess those values.
+
+Repository input is either a local checkout path or a Git URL plus ref. Git
+input is resolved to a detached immutable revision before inspection. Values
+for secret bindings are supplied out of band and are never retained in
+configuration digests, diagnostics, API responses, CLI JSON, or artifacts.
