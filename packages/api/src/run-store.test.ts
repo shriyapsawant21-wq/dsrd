@@ -10,3 +10,13 @@ it("publishes progress to run subscribers", () => {
   expect(events).toEqual(["exploring"]);
   expect(store.get(run.id)?.progress.percentage).toBe(20);
 });
+
+it("redacts stored diagnostics regardless of the caller", () => {
+  const store = new RunStore();
+  const run = store.create();
+  store.setDiagnostics(run.id, [{ code: "upstream", message: "api_key=super-secret" }]);
+
+  expect(store.get(run.id)?.diagnostics).toEqual([
+    { code: "upstream", message: "api_key=[REDACTED]" },
+  ]);
+});
