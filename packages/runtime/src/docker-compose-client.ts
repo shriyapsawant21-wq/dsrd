@@ -1,3 +1,4 @@
+import { redactSecrets } from "@dsrd/contracts";
 import type {
   CommandInvocation,
   CommandResult,
@@ -97,7 +98,7 @@ export class DockerComposeClient {
     const result = await this.runCompose(["logs", "--no-color"], signal);
     return result.stdout
       .split(/\r?\n/)
-      .map((line) => line.trimEnd())
+      .map((line) => redactSecrets(line.trimEnd()))
       .filter((line) => line.length > 0);
   }
 

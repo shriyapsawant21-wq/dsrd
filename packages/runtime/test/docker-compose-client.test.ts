@@ -20,6 +20,16 @@ class RecordingRunner implements CommandRunner {
 }
 
 describe("DockerComposeClient lifecycle", () => {
+  it("redacts secrets from collected Compose logs", async () => {
+    const client = new DockerComposeClient({
+      projectDirectory: "C:/fixture",
+      runner: new RecordingRunner({ stdout: "api | token=super-secret\n", stderr: "", exitCode: 0 }),
+    });
+
+    const logs = await client.collectLogs();
+    expect(logs).toEqual(["api | token=[REDACTED]"]);
+  });
+
   it("preflights configuration and acquires images before a measured start", async () => {
     const runner = new RecordingRunner();
     const client = new DockerComposeClient({
