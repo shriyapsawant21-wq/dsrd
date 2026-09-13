@@ -7,6 +7,7 @@ export type ProgressEvent = {
   message: string;
   testedSchedules: number;
   failureCount: number;
+  diagnostics?: RunDiagnostic[];
 };
 
 export function initialProgress(runId: string): ProgressEvent {
@@ -19,3 +20,4 @@ export function initialProgress(runId: string): ProgressEvent {
     failureCount: 0
   };
 }
+import type { RunDiagnostic } from "@dsrd/contracts";

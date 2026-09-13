@@ -114,6 +114,30 @@ it("persists a repository-search artifact and completes its event stream", async
   }
 });
 
+it("includes terminal diagnostics in repository-search SSE events", async () => {
+  const store = new RunStore();
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    search: async () => ({
+      status: "needs_configuration",
+      testedSchedules: 2,
+      diagnostics: [{ code: "configuration_required", message: "dsrd.yaml is required" }],
+    }),
+  });
+  const server = app.listen(0);
+  await once(server, "listening");
+  try {
+    const created = await request(app).post("/api/repositories/search").send({ repository: { kind: "checkout", path: "/project" } });
+    const port = (server.address() as { port: number }).port;
+    const stream = await fetch(`http://127.0.0.1:${port}/api/runs/${created.body.runId}/events`);
+    const text = await stream.text();
+    expect(text).toContain("event: needs_configuration");
+    expect(text).toContain('"testedSchedules":2');
+    expect(text).toContain('"configuration_required"');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
 it("returns an uploaded run and reports that an unfinished artifact is unavailable", async () => {
   const store = new RunStore();
   const app = createApp(store, new RunService(store, async () => new Promise(() => undefined)));

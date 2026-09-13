@@ -57,9 +57,13 @@ export function createApp(store: RunStore, service: RunService, onboarding: ApiO
         try {
           const result = await onboarding.search!({ repository, targetId: req.body?.targetId, configPath: req.body?.configPath });
           if (result.status === "found_failure" && result.artifact !== undefined) store.setArtifact(run.id, result.artifact);
-          if (result.diagnostics !== undefined) store.setDiagnostics(run.id, result.diagnostics);
+          const diagnostics = result.diagnostics?.map((diagnostic) => ({
+            ...diagnostic,
+            message: redactSecrets(diagnostic.message),
+          }));
+          if (diagnostics !== undefined) store.setDiagnostics(run.id, diagnostics);
           const phase = result.status === "found_failure" ? "completed" : result.status as RunPhase;
-          store.publish(run.id, { ...store.get(run.id)!.progress, phase, percentage: 100, message: phase.replaceAll("_", " "), testedSchedules: result.testedSchedules ?? 0, failureCount: phase === "completed" ? 1 : 0 });
+          store.publish(run.id, { ...store.get(run.id)!.progress, phase, percentage: 100, message: phase.replaceAll("_", " "), testedSchedules: result.testedSchedules ?? 0, failureCount: phase === "completed" ? 1 : 0, ...(diagnostics === undefined ? {} : { diagnostics }) });
         } catch (error) {
           store.setError(run.id, redactSecrets(error instanceof Error ? error.message : "Repository search failed"));
           store.publish(run.id, { ...store.get(run.id)!.progress, phase: "error", percentage: 100, message: "Repository search failed", failureCount: 0 });
@@ -97,6 +101,7 @@ export function createApp(store: RunStore, service: RunService, onboarding: ApiO
       if (terminal) res.end();
     };
     write(run.progress);
+    if (isTerminalRunPhase(run.progress.phase)) return;
     const unsubscribe = store.subscribe(run.id, write);
     req.on("close", unsubscribe);
   });
