@@ -12,3 +12,7 @@ Cleanup is exact: remove only containers, networks, volumes, processes, and
 workspaces owned by the attempt. Never use broad Docker cleanup commands such
 as `docker system prune`. Cleanup failure is an `execution_error` and prevents
 artifact publication.
+
+Public API terminal events include the tested-schedule count and sanitized
+diagnostics. Consumers can use stream closure as the terminal signal, then
+fetch the run record or persisted artifact.
