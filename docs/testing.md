@@ -32,3 +32,8 @@ The focused CLI suite covers checkout and pinned-Git onboarding, inspection,
 replay, stable JSON terminal records, and malformed input. The API suite covers
 asynchronous repository search, artifact persistence, report retrieval, replay,
 and terminal SSE closure.
+
+Kubernetes conformance is optional and requires both `kubectl` and `kind`, plus
+a disposable Kind cluster selected by the fixture. This checkout has `kubectl`
+available but no `kind` executable, so Kind-gated tests remain intentionally
+skipped; this is an environment prerequisite, not a passing Kubernetes claim.
