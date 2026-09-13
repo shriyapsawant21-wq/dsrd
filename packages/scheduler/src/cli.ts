@@ -117,6 +117,7 @@ export async function runCli(
     .option("--json", "emit one machine-readable terminal result")
     .option("-o, --output <path>", "artifact output path", "failure.json")
     .action(async (options: { platform: string; target: string; delayOptions?: string; quick?: boolean; maxRuns?: string; baselineRuns?: string; confirmationRuns?: string; output: string; json?: boolean }) => {
+      try {
       const delayOptionsMs = options.delayOptions
         ? parseDelayOptions(options.delayOptions)
         : options.quick ? quickDelayOptionsMs : defaultDelayOptionsMs;
@@ -199,6 +200,11 @@ export async function runCli(
           originalPerturbations: result.artifact.originalSchedule.perturbations.length
         })
       );
+      } catch (error) {
+        if (!options.json) throw error;
+        exitCode = 5;
+        dependencies.log(JSON.stringify({ status: "execution_error", exitCode }));
+      }
     });
 
   program

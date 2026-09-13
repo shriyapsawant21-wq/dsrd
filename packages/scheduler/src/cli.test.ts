@@ -62,6 +62,17 @@ describe("race-debugger CLI", () => {
     });
   });
 
+  it("emits one JSON terminal error for invalid direct-search input", async () => {
+    const output: string[] = [];
+    await expect(runCli(["search", "--platform", "unsupported", "--json"], {
+      platform: fakePlatform,
+      log: (message) => output.push(message),
+    })).resolves.toBe(5);
+
+    expect(output).toHaveLength(1);
+    expect(JSON.parse(output[0]!)).toMatchObject({ status: "execution_error", exitCode: 5 });
+  });
+
   it("inspects a checkout through the onboarding service in JSON mode", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dsrd-cli-inspect-"));
     directories.push(directory);
