@@ -19,6 +19,11 @@ export function isTerminalRunPhase(phase: RunPhase): boolean {
   ].includes(phase);
 }
 
+function repositorySearchTerminalPhase(status: string): RunPhase {
+  if (status === "found_failure") return "completed";
+  return isTerminalRunPhase(status as RunPhase) ? status as RunPhase : "error";
+}
+
 function summarizeFailures(artifact?: FailureArtifact) {
   if (!artifact) return [];
   const event = [...artifact.events].reverse().find(({ event }) => /fail|error|refused|exit|fatal/i.test(event)) ?? artifact.events.at(-1);
@@ -62,7 +67,7 @@ export function createApp(store: RunStore, service: RunService, onboarding: ApiO
             message: redactSecrets(diagnostic.message),
           }));
           if (diagnostics !== undefined) store.setDiagnostics(run.id, diagnostics);
-          const phase = result.status === "found_failure" ? "completed" : result.status as RunPhase;
+          const phase = repositorySearchTerminalPhase(result.status);
           store.publish(run.id, { ...store.get(run.id)!.progress, phase, percentage: 100, message: phase.replaceAll("_", " "), testedSchedules: result.testedSchedules ?? 0, failureCount: phase === "completed" ? 1 : 0, ...(diagnostics === undefined ? {} : { diagnostics }) });
         } catch (error) {
           store.setError(run.id, redactSecrets(error instanceof Error ? error.message : "Repository search failed"));

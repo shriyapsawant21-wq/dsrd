@@ -87,6 +87,26 @@ it("starts repository search asynchronously and preserves its terminal outcome",
   });
 });
 
+it("normalizes an unknown repository-search outcome to a closing error event", async () => {
+  const store = new RunStore();
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    search: async () => ({ status: "unknown_future_outcome", testedSchedules: 2 }),
+  });
+  const server = app.listen(0);
+  await once(server, "listening");
+  try {
+    const created = await request(app).post("/api/repositories/search").send({ repository: { kind: "checkout", path: "/project" } });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(store.get(created.body.runId)?.progress).toMatchObject({ phase: "error", percentage: 100, testedSchedules: 2 });
+
+    const port = (server.address() as { port: number }).port;
+    const stream = await fetch(`http://127.0.0.1:${port}/api/runs/${created.body.runId}/events`);
+    expect(await stream.text()).toContain("event: error");
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
 it("persists a repository-search artifact and completes its event stream", async () => {
   const store = new RunStore();
   let finish!: (value: { status: string; testedSchedules: number; artifact: FailureArtifact }) => void;
