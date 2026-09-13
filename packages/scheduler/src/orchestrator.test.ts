@@ -52,6 +52,24 @@ describe("orchestration", () => {
     expect(result).not.toHaveProperty("artifact");
   });
 
+  it("preserves cancellation during candidate exploration without publishing an artifact", async () => {
+    const result = await discoverFailure({
+      candidates: [{ id: "candidate", perturbations: [{ workloadId: "bootstrap", phase: "ready", delayMs: 1000 }] }],
+      delayOptionsMs: [0, 1000],
+      target,
+      baselineRuns: 1,
+      runSchedule: async (_target, schedule) => ({
+        scheduleId: schedule.id,
+        status: schedule.perturbations.length === 0 ? "healthy" : "cancelled",
+        events: [],
+        logs: [],
+      }),
+    });
+
+    expect(result).toMatchObject({ status: "cancelled", testedSchedules: 2, exploredCandidateSchedules: 1 });
+    expect(result).not.toHaveProperty("artifact");
+  });
+
   it("runs three healthy baselines before exploring candidates by default", async () => {
     const calls: string[] = [];
     await discoverFailure({

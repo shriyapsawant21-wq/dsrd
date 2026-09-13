@@ -39,7 +39,7 @@ export type DiscoveryResult =
       exploredCandidateSchedules: number;
     }
   | {
-      status: "target_unhealthy" | "needs_configuration" | "execution_error" | "inconclusive";
+      status: "target_unhealthy" | "needs_configuration" | "execution_error" | "inconclusive" | "cancelled";
       testedSchedules: number;
       exploredCandidateSchedules: number;
       diagnostics?: RunResult["diagnostics"];
@@ -103,7 +103,7 @@ export async function discoverFailure(
       searchOptions,
     );
   exploredCandidateSchedules = searchResult.testedSchedules;
-  if (searchResult.status === "no_failure") {
+  if (searchResult.status !== "found_failure") {
     return { ...searchResult, testedSchedules: executions, exploredCandidateSchedules: searchResult.testedSchedules };
   }
 
@@ -208,10 +208,11 @@ export async function discoverFailure(
   }
 }
 
-function terminalStatus(result: RunResult): "target_unhealthy" | "needs_configuration" | "execution_error" | "inconclusive" {
+function terminalStatus(result: RunResult): "target_unhealthy" | "needs_configuration" | "execution_error" | "inconclusive" | "cancelled" {
   if (result.status === "workload_failure") return "target_unhealthy";
   if (result.diagnostics?.some(({ code }) => code === "local_process_reset_required")) return "needs_configuration";
   if (result.status === "execution_error") return "execution_error";
+  if (result.status === "cancelled") return "cancelled";
   return "inconclusive";
 }
 
