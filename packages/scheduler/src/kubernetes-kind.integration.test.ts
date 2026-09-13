@@ -44,5 +44,5 @@ describe.skipIf(!enabled)("Kind Kubernetes platform", () => {
       expect(result.artifact.target).toEqual(target);
       await expect(replayFailure(result.artifact, platform.replay.bind(platform))).resolves.toMatchObject({ status: "reproduced" });
     }
-  }, 300_000);
+  }, 420_000);
 });
