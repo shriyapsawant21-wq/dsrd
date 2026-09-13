@@ -34,6 +34,18 @@ it("redacts secrets from API errors", async () => {
   expect(JSON.stringify(response.body)).toContain("[REDACTED]");
 });
 
+it("redacts secrets from asynchronous repository-search failures", async () => {
+  const store = new RunStore();
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    search: async () => { throw new Error("password=super-secret"); },
+  });
+
+  const created = await request(app).post("/api/repositories/search").send({ repository: { kind: "checkout", path: "/project" } });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const body = (await request(app).get(`/api/runs/${created.body.runId}`)).body;
+  expect(JSON.stringify(body)).not.toContain("super-secret");
+});
+
 it("inspects a repository input through the injected onboarding operation", async () => {
   const store = new RunStore();
   const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {

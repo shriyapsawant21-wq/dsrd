@@ -61,7 +61,7 @@ export function createApp(store: RunStore, service: RunService, onboarding: ApiO
           const phase = result.status === "found_failure" ? "completed" : result.status as RunPhase;
           store.publish(run.id, { ...store.get(run.id)!.progress, phase, percentage: 100, message: phase.replaceAll("_", " "), testedSchedules: result.testedSchedules ?? 0, failureCount: phase === "completed" ? 1 : 0 });
         } catch (error) {
-          store.setError(run.id, error instanceof Error ? error.message : "Repository search failed");
+          store.setError(run.id, redactSecrets(error instanceof Error ? error.message : "Repository search failed"));
           store.publish(run.id, { ...store.get(run.id)!.progress, phase: "error", percentage: 100, message: "Repository search failed", failureCount: 0 });
         }
       })();
