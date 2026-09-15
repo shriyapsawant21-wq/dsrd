@@ -36,6 +36,14 @@ describe("searchSchedules", () => {
 
     expect(result).toEqual({ status: "no_failure", testedSchedules: 3 });
   });
+
+  it.each(["execution_error", "inconclusive", "cancelled"] as const)("preserves a %s physical terminal result instead of reporting no failure", async (status) => {
+    const result = await searchSchedules(schedules, target, async (_target, schedule) =>
+      runResult(schedule.id, schedule.id === "schedule-001" ? status : "healthy")
+    );
+
+    expect(result).toMatchObject({ status, testedSchedules: 2 });
+  });
 });
 
 describe("searchCandidateStages", () => {

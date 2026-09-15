@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   DockerRuntimeController,
+  DockerCommandError,
   RunTimeoutError,
   type ComposeRuntime,
   type Delay,
@@ -21,11 +22,15 @@ const passingResult: RunResult = {
 
 class RecordingCompose implements ComposeRuntime {
   readonly actions: string[] = [];
+  failPrepare = false;
+  prepareFailure?: Error;
   failStartFor?: string;
   failStop = false;
 
   async prepare(): Promise<void> {
     this.actions.push("prepare");
+    if (this.failPrepare) throw new Error("host port 5432 is already allocated");
+    if (this.prepareFailure !== undefined) throw this.prepareFailure;
   }
 
   async resetStack(): Promise<void> {
@@ -62,6 +67,13 @@ class RecordingCompose implements ComposeRuntime {
     if (this.failStop) {
       throw new Error("cleanup failed");
     }
+  }
+}
+
+class SlowResetCompose extends RecordingCompose {
+  override async resetStack(): Promise<void> {
+    this.actions.push("reset");
+    await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
 
@@ -256,6 +268,47 @@ const schedule: Schedule = {
 };
 
 describe("DockerRuntimeController", () => {
+  it("classifies preparation failure and cleans only the current Compose attempt", async () => {
+    const compose = new RecordingCompose();
+    compose.failPrepare = true;
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer: new RecordingObserver(),
+    });
+
+    await expect(controller.runSchedule({ id: "prepare-failed", perturbations: [] }, ["api"])).resolves.toEqual({
+      scheduleId: "prepare-failed",
+      status: "execution_error",
+      events: [],
+      logs: [],
+      diagnostics: [{ code: "runtime_operation_failed", message: "host port 5432 is already allocated" }],
+    });
+    expect(compose.actions).toEqual(["prepare", "stop"]);
+  });
+
+  it("classifies a Docker host-port conflict without returning Docker stderr", async () => {
+    const compose = new RecordingCompose();
+    compose.prepareFailure = new DockerCommandError(
+      { command: "docker", args: ["compose", "up"], cwd: "/owned/attempt" },
+      { stdout: "", stderr: "Bind for 0.0.0.0:5432 failed: port is already allocated", exitCode: 1 },
+    );
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer: new RecordingObserver(),
+    });
+
+    await expect(controller.runSchedule({ id: "port-conflict", perturbations: [] }, ["api"])).resolves.toEqual({
+      scheduleId: "port-conflict",
+      status: "execution_error",
+      events: [],
+      logs: [],
+      diagnostics: [{ code: "host_port_conflict", message: "Docker command failed with exit code 1" }],
+    });
+    expect(compose.actions).toEqual(["prepare", "stop"]);
+  });
+
   it("classifies a failed Compose operation as an execution error and cleans its stack", async () => {
     const compose = new RecordingCompose();
     compose.failStartFor = "api";
@@ -725,6 +778,18 @@ describe("DockerRuntimeController", () => {
     await assertion;
     expect(compose.actions.at(-1)).toBe("stop");
     vi.useRealTimers();
+  });
+
+  it("starts the measured timeout only after reset preparation finishes", async () => {
+    const compose = new SlowResetCompose();
+    const controller = new DockerRuntimeController({
+      compose,
+      delay: new RecordingDelay(compose.actions),
+      observer: new RecordingObserver(),
+      runTimeoutMs: 5,
+    });
+
+    await expect(controller.runSchedule({ id: "prepared", perturbations: [] }, ["api"])).resolves.toMatchObject({ status: "healthy" });
   });
 
   it("aborts observer work before cleanup when the run times out", async () => {

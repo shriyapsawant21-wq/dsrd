@@ -6,6 +6,7 @@ import { loadFailureArtifact, saveFailureArtifact } from "./artifact.js";
 import { generateAdaptiveCandidateStages, generateFocusedCandidates } from "./candidates.js";
 import { fakePlatform } from "./fake-platform.js";
 import { discoverFailure, replayFailure } from "./orchestrator.js";
+import { createOnboardingService, runSharedDiscovery, type SharedDiscoveryOptions } from "./onboarding.js";
 import { chooseMenuAction, createReadlinePrompt, type PromptAdapter } from "./prompt.js";
 import { renderDashboard, renderReplaySummary, renderResultSummary } from "./presentation.js";
 import type { ExecutionPlatform, TargetConfig } from "@dsrd/contracts";
@@ -16,6 +17,7 @@ const quickDelayOptionsMs = [0, 2500];
 export type CliDependencies = {
   platform: ExecutionPlatform;
   log: (message: string) => void;
+  sharedDiscovery?: (options: SharedDiscoveryOptions) => ReturnType<typeof runSharedDiscovery>;
   interactive?: boolean;
   useColor?: boolean;
   prompt?: PromptAdapter;
@@ -48,7 +50,7 @@ export async function runCli(
     platform: fakePlatform,
     log: console.log
   }
-): Promise<void> {
+): Promise<number> {
   if (args.length === 0 && dependencies.interactive) {
     dependencies.log(renderDashboard(dependencies.useColor ?? false));
     const prompt = dependencies.prompt ?? createReadlinePrompt();
@@ -57,23 +59,50 @@ export async function runCli(
       const action = await chooseMenuAction(prompt, dependencies.log);
       if (action === "quit") {
         dependencies.log("See you next time.");
-        return;
+        return 0;
       }
 
-      await runCli(await collectGuidedArgs(action, prompt, dependencies.log), {
+      return runCli(await collectGuidedArgs(action, prompt, dependencies.log), {
         ...dependencies,
         prompt: undefined
       });
-      return;
     } finally {
       prompt.close();
     }
   }
 
   const program = new Command();
+  let exitCode = 0;
   const runSchedule = dependencies.platform.run.bind(dependencies.platform);
   const replaySchedule = dependencies.platform.replay.bind(dependencies.platform);
   program.name("race-debugger").description("Explore startup timing races");
+
+  program
+    .command("inspect")
+    .description("inspect a checkout or pinned Git repository without executing it")
+    .option("--checkout <path>", "repository checkout path")
+    .option("--git <url>", "pinned Git repository URL")
+    .option("--ref <ref>", "Git revision or ref", "HEAD")
+    .option("--json", "emit a machine-readable inspection result")
+    .action(async (options: { checkout?: string; git?: string; ref: string; json?: boolean }) => {
+      try {
+        if ((options.checkout === undefined) === (options.git === undefined)) throw new Error("Provide exactly one of --checkout or --git");
+        const inspection = await createOnboardingService({ platform: dependencies.platform }).inspect({
+          repository: options.checkout === undefined
+            ? { kind: "git", url: options.git!, ref: options.ref, submodules: false, lfs: false }
+            : { kind: "checkout", path: options.checkout },
+        });
+        if (options.json) {
+          dependencies.log(JSON.stringify({ status: "inspected", ...inspection }));
+        } else {
+          dependencies.log(`Found ${inspection.candidates.length} target candidate(s).`);
+        }
+      } catch (error) {
+        if (!options.json) throw error;
+        exitCode = 5;
+        dependencies.log(JSON.stringify({ status: "execution_error", exitCode }));
+      }
+    });
 
   program
     .command("search")
@@ -83,8 +112,12 @@ export async function runCli(
     .option("-d, --delay-options <milliseconds>", "comma-separated delay values")
     .option("--quick", "test one perturbation at a time with a small delay set")
     .option("-n, --max-runs <number>", "maximum physical schedule executions")
+    .option("--baseline-runs <number>", "required consecutive healthy baseline runs")
+    .option("--confirmation-runs <number>", "required matching failure confirmations")
+    .option("--json", "emit one machine-readable terminal result")
     .option("-o, --output <path>", "artifact output path", "failure.json")
-    .action(async (options: { platform: string; target: string; delayOptions?: string; quick?: boolean; maxRuns?: string; output: string }) => {
+    .action(async (options: { platform: string; target: string; delayOptions?: string; quick?: boolean; maxRuns?: string; baselineRuns?: string; confirmationRuns?: string; output: string; json?: boolean }) => {
+      try {
       const delayOptionsMs = options.delayOptions
         ? parseDelayOptions(options.delayOptions)
         : options.quick ? quickDelayOptionsMs : defaultDelayOptionsMs;
@@ -94,40 +127,60 @@ export async function runCli(
       const candidateStages = options.quick ? undefined : generateAdaptiveCandidateStages(workloads, delayOptionsMs);
       const candidateMaximum = candidates?.length ?? candidateStages?.at(-1)?.candidateCount ?? 0;
       const maxRuns = options.maxRuns === undefined ? undefined : parseMaxRuns(options.maxRuns);
+      const baselineRuns = options.baselineRuns === undefined ? undefined : parseRunCount(options.baselineRuns, "Baseline runs");
+      const confirmationRuns = options.confirmationRuns === undefined ? undefined : parseRunCount(options.confirmationRuns, "Confirmation runs");
       let runNumber = 0;
       let failureFound = false;
       const runWithProgress = async (runTarget: TargetConfig, schedule: Parameters<typeof runSchedule>[1]) => {
         runNumber += 1;
         const verificationLabel = failureFound ? "  (minimization/replay verification)" : "";
-        dependencies.log(`RUN ${runNumber.toString().padStart(2, "0")}${verificationLabel}  ${describeSchedule(schedule)}`);
+        if (!options.json) dependencies.log(`RUN ${runNumber.toString().padStart(2, "0")}${verificationLabel}  ${describeSchedule(schedule)}`);
         const runResult = await runSchedule(runTarget, schedule);
         if (runResult.status === "workload_failure") failureFound = true;
-        dependencies.log(runResult.status === "healthy" ? "PASS" : "FAIL — race detected");
-        dependencies.log("");
+        if (!options.json) {
+          dependencies.log(runResult.status === "healthy" ? "PASS" : "FAIL — race detected");
+          dependencies.log("");
+        }
         return runResult;
       };
-      dependencies.log(options.quick
+      if (!options.json) dependencies.log(options.quick
         ? `Starting quick scan (${Math.min(maxRuns ?? candidateMaximum, candidateMaximum)} schedules maximum).`
         : `Starting adaptive thorough scan (${Math.min(maxRuns ?? candidateMaximum, candidateMaximum)} schedules maximum).`);
-      dependencies.log("");
-      const result = await discoverFailure({
-        candidates,
-        candidateStages,
+      if (!options.json) dependencies.log("");
+      const result = await (dependencies.sharedDiscovery ?? runSharedDiscovery)({
+        platform: dependencies.platform,
         delayOptionsMs,
         target,
+        candidates,
+        candidateStages,
         runSchedule: runWithProgress,
+        replaySchedule,
         maxSchedules: maxRuns,
+        baselineRuns,
+        confirmationRuns,
       });
 
       if (result.status !== "found_failure") {
+        exitCode = result.status === "no_failure" ? 0 : discoveryExitCode(result.status);
+        if (options.json) {
+          dependencies.log(JSON.stringify({ status: result.status, exitCode, testedSchedules: result.testedSchedules }));
+          return;
+        }
         dependencies.log(
-          renderResultSummary({ status: "no-failure", testedSchedules: result.testedSchedules })
+          renderResultSummary({
+            status: result.status === "no_failure" ? "no-failure" : result.status,
+            testedSchedules: result.testedSchedules,
+          })
         );
         return;
       }
 
       const artifactPath = resolve(options.output);
       await saveFailureArtifact(artifactPath, result.artifact);
+      if (options.json) {
+        dependencies.log(JSON.stringify({ status: "found_failure", exitCode: 0, testedSchedules: result.testedSchedules, artifactPath }));
+        return;
+      }
       const dimensions = workloads.reduce(
         (count, workload) => count + workload.perturbablePhases.length,
         0
@@ -142,23 +195,71 @@ export async function runCli(
           events: result.artifact.events,
           useColor: dependencies.useColor,
           scope: { workloads: workloads.length, dimensions, candidates: candidateMaximum },
-          exploredSchedules: result.testedSchedules,
+          exploredSchedules: result.exploredCandidateSchedules,
+          physicalAttempts: result.testedSchedules,
           originalPerturbations: result.artifact.originalSchedule.perturbations.length
         })
       );
+      } catch (error) {
+        if (!options.json) throw error;
+        exitCode = 5;
+        dependencies.log(JSON.stringify({ status: "execution_error", exitCode }));
+      }
+    });
+
+  program
+    .command("onboard-search")
+    .description("search an explicitly configured checkout or pinned Git repository")
+    .option("--checkout <path>", "repository checkout path")
+    .option("--git <url>", "pinned Git repository URL")
+    .option("--ref <ref>", "Git revision or ref", "HEAD")
+    .option("--target-id <id>", "explicit inspected target id")
+    .option("--config <path>", "repository-relative dsrd.yaml path")
+    .option("--json", "emit one machine-readable terminal result")
+    .option("-o, --output <path>", "artifact output path", "failure.json")
+    .action(async (options: { checkout?: string; git?: string; ref: string; targetId?: string; config?: string; json?: boolean; output: string }) => {
+      try {
+        if ((options.checkout === undefined) === (options.git === undefined)) throw new Error("Provide exactly one of --checkout or --git");
+        const result = await createOnboardingService({ platform: dependencies.platform }).search({
+          repository: options.checkout === undefined
+            ? { kind: "git", url: options.git!, ref: options.ref, submodules: false, lfs: false }
+            : { kind: "checkout", path: options.checkout },
+          targetId: options.targetId,
+          configPath: options.config,
+        });
+        exitCode = result.status === "found_failure" || result.status === "no_failure" ? 0 : discoveryExitCode(result.status);
+        if (result.status === "found_failure") {
+          const artifactPath = resolve(options.output);
+          await saveFailureArtifact(artifactPath, result.artifact);
+          dependencies.log(options.json ? JSON.stringify({ status: result.status, exitCode, testedSchedules: result.testedSchedules, artifactPath }) : `Failure artifact saved: ${artifactPath}`);
+          return;
+        }
+        dependencies.log(options.json ? JSON.stringify({ status: result.status, exitCode, testedSchedules: result.testedSchedules, ...("diagnostics" in result ? { diagnostics: result.diagnostics } : {}) }) : result.status);
+      } catch (error) {
+        if (!options.json) throw error;
+        exitCode = 5;
+        dependencies.log(JSON.stringify({ status: "execution_error", exitCode }));
+      }
     });
 
   program
     .command("replay <artifactPath>")
     .description("replay a saved failure artifact")
-    .action(async (artifactPath: string) => {
+    .option("--json", "emit one machine-readable terminal result")
+    .action(async (artifactPath: string, options: { json?: boolean }) => {
+      try {
       const artifact = await loadFailureArtifact(artifactPath);
       const result = await replayFailure(artifact, replaySchedule);
+      exitCode = result.status === "reproduced" ? 0 : 4;
       const evidenceMatched = artifact.events.filter((expected) =>
         result.result.events.some((actual) =>
           actual.service === expected.service && actual.event === expected.event
         )
       ).length;
+      if (options.json) {
+        dependencies.log(JSON.stringify({ status: result.status, exitCode, result: result.result }));
+        return;
+      }
       dependencies.log(renderReplaySummary(
         artifact,
         result.result,
@@ -166,14 +267,31 @@ export async function runCli(
         dependencies.useColor,
         evidenceMatched
       ));
+      } catch (error) {
+        if (!options.json) throw error;
+        exitCode = 5;
+        dependencies.log(JSON.stringify({ status: "execution_error", exitCode }));
+      }
     });
 
   if (args.length === 0) {
     dependencies.log(program.helpInformation());
-    return;
+    return 0;
   }
 
   await program.parseAsync(["node", "race-debugger", ...args]);
+  return exitCode;
+}
+
+function discoveryExitCode(status: Exclude<Parameters<typeof renderResultSummary>[0]["status"], "failure" | "reproduced" | "not-reproduced" | "no-failure">): number {
+  switch (status) {
+    case "needs_configuration": return 2;
+    case "unsupported_target": return 3;
+    case "target_unhealthy": return 4;
+    case "execution_error": return 5;
+    case "inconclusive": return 6;
+    case "cancelled": return 130;
+  }
 }
 
 async function collectGuidedArgs(
@@ -288,6 +406,14 @@ function parseMaxRuns(input: string): number {
   const value = Number(input);
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new Error("Maximum runs must be a positive integer");
+  }
+  return value;
+}
+
+function parseRunCount(input: string, label: string): number {
+  const value = Number(input);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`${label} must be a positive integer`);
   }
   return value;
 }

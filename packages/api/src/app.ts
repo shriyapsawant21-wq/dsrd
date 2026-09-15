@@ -3,7 +3,26 @@ import multer from "multer";
 import { RunService } from "./run-service.js";
 import { RunStore } from "./run-store.js";
 import { materializeProject } from "./project-upload.js";
-import type { FailureArtifact } from "@dsrd/contracts";
+import type { RunPhase } from "./contracts.js";
+import { failureArtifactSchema, redactSecrets, repositoryInputSchema, type FailureArtifact, type InspectionResult, type RepositoryInput, type RunDiagnostic, type RunResult } from "@dsrd/contracts";
+
+export type ApiOnboardingOperations = {
+  inspect?: (repository: RepositoryInput) => Promise<InspectionResult>;
+  replay?: (artifact: FailureArtifact) => Promise<{ status: "reproduced" | "not_reproduced"; result: RunResult }>;
+  search?: (request: { repository: RepositoryInput; targetId?: string; configPath?: string }) => Promise<{ status: string; testedSchedules?: number; artifact?: FailureArtifact; diagnostics?: RunDiagnostic[] }>;
+};
+
+export function isTerminalRunPhase(phase: RunPhase): boolean {
+  return [
+    "completed", "no_failure", "target_unhealthy", "needs_configuration",
+    "unsupported_target", "execution_error", "inconclusive", "cancelled", "error",
+  ].includes(phase);
+}
+
+function repositorySearchTerminalPhase(status: string): RunPhase {
+  if (status === "found_failure") return "completed";
+  return isTerminalRunPhase(status as RunPhase) ? status as RunPhase : "error";
+}
 
 function summarizeFailures(artifact?: FailureArtifact) {
   if (!artifact) return [];
@@ -12,8 +31,54 @@ function summarizeFailures(artifact?: FailureArtifact) {
 }
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2_000_000, files: 200 } });
-export function createApp(store: RunStore, service: RunService) {
+export function createApp(store: RunStore, service: RunService, onboarding: ApiOnboardingOperations = {}) {
   const app = express();
+  app.use(express.json({ limit: "1mb" }));
+  app.post("/api/repositories/inspect", async (req, res) => {
+    if (onboarding.inspect === undefined) return res.status(501).json({ error: "Repository inspection is not configured" });
+    try {
+      const inspection = await onboarding.inspect(repositoryInputSchema.parse(req.body?.repository));
+      return res.status(200).json({ status: "inspected", inspection });
+    } catch (error) {
+      return res.status(400).json({ error: redactSecrets(error instanceof Error ? error.message : "Invalid repository input") });
+    }
+  });
+  app.post("/api/replay", async (req, res) => {
+    if (onboarding.replay === undefined) return res.status(501).json({ error: "Replay is not configured" });
+    try {
+      const result = await onboarding.replay(failureArtifactSchema.parse(req.body?.artifact));
+      return res.status(200).json(result);
+    } catch (error) {
+      return res.status(400).json({ error: redactSecrets(error instanceof Error ? error.message : "Invalid replay artifact") });
+    }
+  });
+  app.post("/api/repositories/search", async (req, res) => {
+    if (onboarding.search === undefined) return res.status(501).json({ error: "Repository search is not configured" });
+    try {
+      const repository = repositoryInputSchema.parse(req.body?.repository);
+      const run = store.create();
+      void (async () => {
+        store.publish(run.id, { ...run.progress, phase: "exploring", percentage: 10, message: "Inspecting repository" });
+        try {
+          const result = await onboarding.search!({ repository, targetId: req.body?.targetId, configPath: req.body?.configPath });
+          if (result.status === "found_failure" && result.artifact !== undefined) store.setArtifact(run.id, result.artifact);
+          const diagnostics = result.diagnostics?.map((diagnostic) => ({
+            ...diagnostic,
+            message: redactSecrets(diagnostic.message),
+          }));
+          if (diagnostics !== undefined) store.setDiagnostics(run.id, diagnostics);
+          const phase = repositorySearchTerminalPhase(result.status);
+          store.publish(run.id, { ...store.get(run.id)!.progress, phase, percentage: 100, message: phase.replaceAll("_", " "), testedSchedules: result.testedSchedules ?? 0, failureCount: phase === "completed" ? 1 : 0, ...(diagnostics === undefined ? {} : { diagnostics }) });
+        } catch (error) {
+          store.setError(run.id, redactSecrets(error instanceof Error ? error.message : "Repository search failed"));
+          store.publish(run.id, { ...store.get(run.id)!.progress, phase: "error", percentage: 100, message: "Repository search failed", failureCount: 0 });
+        }
+      })();
+      return res.status(202).json({ runId: run.id, status: "queued" });
+    } catch (error) {
+      return res.status(400).json({ error: redactSecrets(error instanceof Error ? error.message : "Invalid repository search") });
+    }
+  });
   app.post("/api/runs", upload.array("projectFiles", 200), async (req, res) => {
     try {
       if (!Array.isArray(req.files) || req.files.length === 0) {
@@ -24,7 +89,7 @@ export function createApp(store: RunStore, service: RunService) {
       void service.start(run.id, target);
       return res.status(202).json({ runId: run.id, status: "queued" });
     } catch (error) {
-      return res.status(400).json({ error: error instanceof Error ? error.message : "Invalid project upload" });
+      return res.status(400).json({ error: redactSecrets(error instanceof Error ? error.message : "Invalid project upload") });
     }
   });
   app.get("/api/runs/:runId", (req, res) => {
@@ -36,11 +101,12 @@ export function createApp(store: RunStore, service: RunService) {
     if (!run) return res.status(404).json({ error: "Run not found" });
     res.status(200).set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     const write = (event: typeof run.progress) => {
-      const terminal = ["completed", "no_failure", "error"].includes(event.phase);
+      const terminal = isTerminalRunPhase(event.phase);
       res.write(`event: ${terminal ? event.phase : "progress"}\ndata: ${JSON.stringify(event)}\n\n`);
       if (terminal) res.end();
     };
     write(run.progress);
+    if (isTerminalRunPhase(run.progress.phase)) return;
     const unsubscribe = store.subscribe(run.id, write);
     req.on("close", unsubscribe);
   });

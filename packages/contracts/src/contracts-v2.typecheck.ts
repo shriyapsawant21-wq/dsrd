@@ -1,6 +1,7 @@
 import type {
   ExecutionPlatform,
   FailureArtifact,
+  FailureArtifactV2,
   Perturbation,
   RunResult,
   Schedule,
@@ -17,7 +18,7 @@ type GenericScheduleHasPerturbations = Schedule extends {
   ? true
   : false;
 
-type GenericArtifactHasTarget = FailureArtifact extends {
+type GenericArtifactHasTarget = FailureArtifactV2 extends {
   version: 2;
   target: TargetConfig;
 }
@@ -43,3 +44,6 @@ type _GenericScheduleHasPerturbations = Assert<GenericScheduleHasPerturbations>;
 type _GenericArtifactHasTarget = Assert<GenericArtifactHasTarget>;
 type _PlatformDiscoversWorkloads = Assert<PlatformDiscoversWorkloads>;
 type _RunUsesPhysicalOutcomes = Assert<RunUsesPhysicalOutcomes>;
+
+type LegacyArtifactsRemainSupported = Extract<FailureArtifact, { version: 2 }> extends FailureArtifactV2 ? true : false;
+type _LegacyArtifactsRemainSupported = Assert<LegacyArtifactsRemainSupported>;

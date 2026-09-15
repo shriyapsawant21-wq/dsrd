@@ -137,6 +137,29 @@ describe("KubectlKubernetesExecutor", () => {
     })]);
   });
 
+  it("gives Kubernetes observers a fresh observation callback after workloads start", async () => {
+    const runner = new RecordingRunner();
+    runner.run = async (invocation) => {
+      runner.invocations.push(invocation);
+      if (invocation.args[0] === "get") return { stdout: JSON.stringify({ items: [] }), stderr: "", exitCode: 0 };
+      return { stdout: "", stderr: "", exitCode: 0 };
+    };
+    let observed: unknown;
+    const executor = new KubectlKubernetesExecutor({
+      target: { platform: "kubernetes", manifestPath: "fixture.yaml", namespace: "race-debugger" },
+      runner,
+      observer: { evaluate: async (snapshot) => {
+        observed = snapshot;
+        return { scheduleId: snapshot.scheduleId, status: "healthy", events: [], logs: [] };
+      } },
+    });
+
+    await executor.runSchedule({ id: "refreshable-observation", perturbations: [] }, ["api"]);
+
+    expect(observed).toHaveProperty("refresh");
+    expect(typeof (observed as { refresh?: unknown }).refresh).toBe("function");
+  });
+
   it("reports a running pod that is not Ready as unhealthy evidence", async () => {
     const runner = new RecordingRunner();
     runner.run = async (invocation) => {

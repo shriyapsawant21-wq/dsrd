@@ -14,11 +14,17 @@ export type SearchResult =
       testedSchedules: number;
       failingSchedule: Schedule;
       failureReason?: string;
+      failureSignature?: RunResult["failureSignature"];
       events: TimelineEvent[];
     }
   | {
       status: "no_failure";
       testedSchedules: number;
+    }
+  | {
+      status: "execution_error" | "inconclusive" | "cancelled";
+      testedSchedules: number;
+      diagnostics?: RunResult["diagnostics"];
     };
 
 /** Runs schedules in order and trusts the proof layer's pass/fail result. */
@@ -57,7 +63,15 @@ export async function searchCandidateStages(
           testedSchedules,
           failingSchedule: schedule,
           failureReason: result.failureReason,
+          ...(result.failureSignature === undefined ? {} : { failureSignature: result.failureSignature }),
           events: result.events
+        };
+      }
+      if (result.status !== "healthy") {
+        return {
+          status: result.status,
+          testedSchedules,
+          ...(result.diagnostics === undefined ? {} : { diagnostics: result.diagnostics }),
         };
       }
     }

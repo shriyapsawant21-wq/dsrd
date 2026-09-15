@@ -1,52 +1,23 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-import type { FailureArtifact } from "@dsrd/contracts";
-import { z } from "zod";
+import { failureArtifactSchema, failureArtifactV2Schema, failureArtifactV3Schema, redactSecrets, type FailureArtifact, type FailureArtifactV2, type FailureArtifactV3 } from "@dsrd/contracts";
 
-const scheduleSchema = z.object({
-  id: z.string().min(1),
-  perturbations: z.array(
-    z.object({
-      workloadId: z.string().min(1),
-      phase: z.enum(["start", "ready"]),
-      delayMs: z.number().nonnegative()
-    })
-  )
-});
+export { failureArtifactSchema };
 
-const targetSchema = z.discriminatedUnion("platform", [
-  z.object({ platform: z.literal("compose"), composeFile: z.string().min(1) }),
-  z.object({ platform: z.literal("local-process"), manifestPath: z.string().min(1) }),
-  z.object({
-    platform: z.literal("kubernetes"),
-    manifestPath: z.string().min(1),
-    namespace: z.string().min(1).optional()
-  })
-]);
-
-export const failureArtifactSchema = z.object({
-  version: z.literal(2),
-  createdAt: z.string().datetime(),
-  target: targetSchema,
-  originalSchedule: scheduleSchema,
-  minimizedSchedule: scheduleSchema,
-  expectedFailureReason: z.string().optional(),
-  events: z.array(
-    z.object({
-      timeMs: z.number(),
-      service: z.string(),
-      event: z.string(),
-      detail: z.string().optional()
-    })
-  )
-});
-
-export type CreateFailureArtifactInput = Omit<FailureArtifact, "version">;
+export type CreateFailureArtifactInput = Omit<FailureArtifactV2, "version">;
 
 export function createFailureArtifact(
   input: CreateFailureArtifactInput
-): FailureArtifact {
-  return failureArtifactSchema.parse({ version: 2, ...input });
+): FailureArtifactV2 {
+  return failureArtifactV2Schema.parse({ version: 2, ...input });
+}
+
+export type CreateVerifiedFailureArtifactInput = Omit<FailureArtifactV3, "version">;
+
+export function createVerifiedFailureArtifact(
+  input: CreateVerifiedFailureArtifactInput,
+): FailureArtifactV3 {
+  return failureArtifactV3Schema.parse({ version: 3, ...input });
 }
 
 export async function saveFailureArtifact(
@@ -54,7 +25,7 @@ export async function saveFailureArtifact(
   artifact: FailureArtifact
 ): Promise<void> {
   const validated = failureArtifactSchema.parse(artifact);
-  await writeFile(path, `${JSON.stringify(validated, null, 2)}\n`, "utf8");
+  await writeFile(path, `${redactSecrets(JSON.stringify(validated, null, 2))}\n`, "utf8");
 }
 
 export async function loadFailureArtifact(path: string): Promise<FailureArtifact> {

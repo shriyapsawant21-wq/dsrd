@@ -1,10 +1,11 @@
 import type { RunPhase } from "./contracts.js";
-import type { FailureArtifact, TargetConfig } from "@dsrd/contracts";
+import { redactSecrets, type FailureArtifact, type TargetConfig } from "@dsrd/contracts";
 import { RunStore } from "./run-store.js";
 
 export type DiscoveryRunner = (target: TargetConfig, onProgress: (testedSchedules: number, totalSchedules: number) => void) => Promise<
   | { status: "completed"; artifact?: FailureArtifact; testedSchedules?: number }
   | { status: "no_failure"; testedSchedules?: number }
+  | { status: "target_unhealthy" | "needs_configuration" | "unsupported_target" | "execution_error" | "inconclusive" | "cancelled"; testedSchedules?: number }
 >;
 export class RunService {
   constructor(private readonly store: RunStore, private readonly discover: DiscoveryRunner) {}
@@ -17,9 +18,9 @@ export class RunService {
       });
       if (result.status === "completed" && result.artifact) this.store.setArtifact(runId, result.artifact);
       this.store.publish(runId, { ...this.require(runId).progress, testedSchedules: result.testedSchedules ?? 0 });
-      this.publishTerminal(runId, result.status, result.status === "completed" ? "Failure report ready" : "No race discovered");
+      this.publishTerminal(runId, result.status, terminalMessage(result.status));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Run failed";
+      const message = redactSecrets(error instanceof Error ? error.message : "Run failed");
       this.store.setError(runId, message);
       this.publishTerminal(runId, "error", message);
     }
@@ -28,4 +29,10 @@ export class RunService {
     this.store.publish(runId, { ...this.require(runId).progress, phase, percentage: 100, message, failureCount: phase === "completed" ? 1 : 0 });
   }
   private require(runId: string) { const run = this.store.get(runId); if (!run) throw new Error(`Unknown run: ${runId}`); return run; }
+}
+
+function terminalMessage(status: Awaited<ReturnType<DiscoveryRunner>>["status"]): string {
+  if (status === "completed") return "Failure report ready";
+  if (status === "no_failure") return "No race discovered";
+  return status.replaceAll("_", " ");
 }

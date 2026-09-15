@@ -37,6 +37,8 @@ export type TimelineEvent = {
   service: string;
   event: string;
   detail?: string;
+  eventId?: string;
+  sequence?: number;
 };
 
 export type PhysicalRunStatus =
@@ -49,6 +51,7 @@ export type PhysicalRunStatus =
 export type RunDiagnostic = {
   code: string;
   message: string;
+  path?: string[];
 };
 
 export type RunResult = {
@@ -58,6 +61,9 @@ export type RunResult = {
   logs: string[];
   failureReason?: string;
   diagnostics?: RunDiagnostic[];
+  failureSignature?: import("./evidence.js").FailureSignature;
+  cleanup?: import("./execution.js").CleanupReport;
+  appliedPerturbations?: import("./execution.js").AppliedPerturbation[];
 };
 
 export interface ExecutionPlatform {
@@ -67,12 +73,9 @@ export interface ExecutionPlatform {
   replay(target: TargetConfig, schedule: Schedule): Promise<RunResult>;
 }
 
-export type FailureArtifact = {
-  version: 2;
-  createdAt: string;
-  target: TargetConfig;
-  originalSchedule: Schedule;
-  minimizedSchedule: Schedule;
-  expectedFailureReason?: string;
-  events: TimelineEvent[];
-};
+export type { FailureArtifact, FailureArtifactV2, FailureArtifactV3, FailureSignature, OrderingConstraint, OrderingPredicate } from "./evidence.js";
+export { failureArtifactSchema, failureArtifactV2Schema, failureArtifactV3Schema } from "./evidence.js";
+export type { AppliedPerturbation, AttemptContext, AttemptHandle, CleanupReport, PreparedTarget, WorkloadCapability, WorkloadModel } from "./execution.js";
+export { defaultExperimentPolicy, experimentPolicySchema, inspectionResultSchema, parseProjectConfig, projectConfigSchema, repositoryInputSchema, runDiagnosticSchema, targetCandidateSchema } from "./repository.js";
+export type { ExperimentPolicy, InspectionResult, ProjectConfig, ReadinessAssertion, RepositoryInput, RepositorySnapshot, TargetCandidate, WorkloadConfig } from "./repository.js";
+export { redactSecrets } from "./redaction.js";

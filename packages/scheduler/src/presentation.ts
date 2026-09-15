@@ -1,7 +1,7 @@
 import type { FailureArtifact, RunResult } from "@dsrd/contracts";
 
 type ResultSummaryInput = {
-  status: "failure" | "no-failure" | "reproduced" | "not-reproduced";
+  status: "failure" | "no-failure" | "target_unhealthy" | "needs_configuration" | "unsupported_target" | "execution_error" | "inconclusive" | "cancelled" | "reproduced" | "not-reproduced";
   testedSchedules?: number;
   artifactPath?: string;
   perturbations?: Array<{ workloadId: string; phase: string; delayMs: number }>;
@@ -10,6 +10,7 @@ type ResultSummaryInput = {
   useColor?: boolean;
   scope?: { workloads: number; dimensions: number; candidates: number };
   exploredSchedules?: number;
+  physicalAttempts?: number;
   originalPerturbations?: number;
 };
 
@@ -42,7 +43,7 @@ export function renderResultSummary(input: ResultSummaryInput): string {
     case "failure":
       const artifactPath = input.artifactPath ?? "failure.json";
       const summary = [
-        `Failure found after ${input.testedSchedules ?? 0} schedules.`,
+        `Failure found after ${input.testedSchedules ?? 0} physical attempts.`,
         `Saved replay artifact: ${artifactPath}`,
         `Replay (PowerShell): race-debugger replay ${quotePowerShellArgument(artifactPath)}`,
         `Replay (POSIX): race-debugger replay ${quotePosixArgument(artifactPath)}`
@@ -71,6 +72,9 @@ export function renderResultSummary(input: ResultSummaryInput): string {
           `Scope explored: ${input.exploredSchedules} of ${input.scope?.candidates ?? input.exploredSchedules} candidate schedules (stopped at first failure).`
         );
       }
+      if (input.physicalAttempts !== undefined) {
+        summary.push(`Physical attempts: ${input.physicalAttempts}.`);
+      }
       if (input.originalPerturbations !== undefined) {
         summary.push(
           `Minimization: ${input.originalPerturbations} perturbation(s) → ${perturbations.length} perturbation(s).`
@@ -79,6 +83,18 @@ export function renderResultSummary(input: ResultSummaryInput): string {
       return styleFailure(summary.join("\n"), input.useColor === true);
     case "no-failure":
       return `No failure found after ${input.testedSchedules ?? 0} schedules.`;
+    case "target_unhealthy":
+      return "Target is unhealthy; exploration did not run.";
+    case "needs_configuration":
+      return "Target needs configuration; exploration did not run.";
+    case "unsupported_target":
+      return "Target is unsupported; exploration did not run.";
+    case "execution_error":
+      return "Execution failed; no replay artifact was published.";
+    case "inconclusive":
+      return "Exploration is inconclusive; no replay artifact was published.";
+    case "cancelled":
+      return "Exploration was cancelled; no replay artifact was published.";
     case "reproduced":
       return "Replay reproduced expected failure.";
     case "not-reproduced":

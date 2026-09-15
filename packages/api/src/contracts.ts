@@ -1,4 +1,4 @@
-export type RunPhase = "queued" | "exploring" | "minimizing" | "completed" | "no_failure" | "error";
+export type RunPhase = "queued" | "exploring" | "minimizing" | "completed" | "no_failure" | "target_unhealthy" | "needs_configuration" | "unsupported_target" | "execution_error" | "inconclusive" | "cancelled" | "error";
 
 export type ProgressEvent = {
   runId: string;
@@ -7,6 +7,7 @@ export type ProgressEvent = {
   message: string;
   testedSchedules: number;
   failureCount: number;
+  diagnostics?: RunDiagnostic[];
 };
 
 export function initialProgress(runId: string): ProgressEvent {
@@ -19,3 +20,4 @@ export function initialProgress(runId: string): ProgressEvent {
     failureCount: 0
   };
 }
+import type { RunDiagnostic } from "@dsrd/contracts";

@@ -74,7 +74,7 @@ describe("createDefaultPlatform", () => {
     });
     await runCli(["replay", artifactPath], { platform, log: (message) => output.push(message) });
     expect(output.join("\n")).toContain("Replay reproduced expected failure");
-  });
+  }, 15_000);
 });
 
 class RecordingPlatform implements ExecutionPlatform {

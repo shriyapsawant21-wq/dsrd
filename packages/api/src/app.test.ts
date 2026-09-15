@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
+import { once } from "node:events";
 import request from "supertest";
-import { createApp } from "./app.js";
+import { createApp, isTerminalRunPhase } from "./app.js";
 import { RunStore } from "./run-store.js";
 import { RunService } from "./run-service.js";
 import type { FailureArtifact } from "@dsrd/contracts";
@@ -9,6 +10,152 @@ it("rejects a non-Compose upload", async () => {
   const store = new RunStore();
   const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })));
   expect((await request(app).post("/api/runs").attach("composeFile", Buffer.from("x"), "logs.txt")).status).toBe(400);
+});
+
+it("closes repository event streams for every terminal outcome", () => {
+  for (const phase of [
+    "completed", "no_failure", "target_unhealthy", "needs_configuration",
+    "unsupported_target", "execution_error", "inconclusive", "cancelled", "error",
+  ] as const) {
+    expect(isTerminalRunPhase(phase)).toBe(true);
+  }
+  expect(isTerminalRunPhase("exploring")).toBe(false);
+});
+
+it("redacts secrets from API errors", async () => {
+  const store = new RunStore();
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    inspect: async () => { throw new Error("token=super-secret"); },
+  });
+
+  const response = await request(app).post("/api/repositories/inspect").send({ repository: { kind: "checkout", path: "/project" } });
+  expect(response.status).toBe(400);
+  expect(JSON.stringify(response.body)).not.toContain("super-secret");
+  expect(JSON.stringify(response.body)).toContain("[REDACTED]");
+});
+
+it("redacts secrets from asynchronous repository-search failures", async () => {
+  const store = new RunStore();
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    search: async () => { throw new Error("password=super-secret"); },
+  });
+
+  const created = await request(app).post("/api/repositories/search").send({ repository: { kind: "checkout", path: "/project" } });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const body = (await request(app).get(`/api/runs/${created.body.runId}`)).body;
+  expect(JSON.stringify(body)).not.toContain("super-secret");
+});
+
+it("inspects a repository input through the injected onboarding operation", async () => {
+  const store = new RunStore();
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    inspect: async (repository) => ({ snapshotId: "snapshot-1", candidates: [], suggestions: [], truncated: false, diagnostics: [{ code: "checked", message: repository.kind }] }),
+  });
+
+  const response = await request(app).post("/api/repositories/inspect").send({ repository: { kind: "checkout", path: "/project" } });
+
+  expect(response.status).toBe(200);
+  expect(response.body).toMatchObject({ status: "inspected", inspection: { diagnostics: [{ message: "checkout" }] } });
+});
+
+it("replays a validated artifact through the injected shared replay operation", async () => {
+  const store = new RunStore();
+  const artifact: FailureArtifact = { version: 2, createdAt: new Date(0).toISOString(), target: { platform: "compose", composeFile: "compose.yaml" }, originalSchedule: { id: "original", perturbations: [] }, minimizedSchedule: { id: "minimal", perturbations: [] }, events: [] };
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    replay: async (received) => ({ status: "reproduced", result: { scheduleId: received.minimizedSchedule.id, status: "workload_failure", events: [], logs: [] } }),
+  });
+
+  const response = await request(app).post("/api/replay").send({ artifact });
+
+  expect(response.status).toBe(200);
+  expect(response.body).toMatchObject({ status: "reproduced", result: { scheduleId: "minimal" } });
+});
+
+it("starts repository search asynchronously and preserves its terminal outcome", async () => {
+  const store = new RunStore();
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    search: async () => ({ status: "needs_configuration", testedSchedules: 0, exploredCandidateSchedules: 0, diagnostics: [] }),
+  });
+
+  const created = await request(app).post("/api/repositories/search").send({ repository: { kind: "checkout", path: "/project" } });
+
+  expect(created.status).toBe(202);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(store.get(created.body.runId)?.progress).toMatchObject({ phase: "needs_configuration", percentage: 100 });
+  expect((await request(app).get(`/api/runs/${created.body.runId}`)).body).toMatchObject({
+    diagnostics: [],
+  });
+});
+
+it("normalizes an unknown repository-search outcome to a closing error event", async () => {
+  const store = new RunStore();
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    search: async () => ({ status: "unknown_future_outcome", testedSchedules: 2 }),
+  });
+  const server = app.listen(0);
+  await once(server, "listening");
+  try {
+    const created = await request(app).post("/api/repositories/search").send({ repository: { kind: "checkout", path: "/project" } });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(store.get(created.body.runId)?.progress).toMatchObject({ phase: "error", percentage: 100, testedSchedules: 2 });
+
+    const port = (server.address() as { port: number }).port;
+    const stream = await fetch(`http://127.0.0.1:${port}/api/runs/${created.body.runId}/events`);
+    expect(await stream.text()).toContain("event: error");
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+it("persists a repository-search artifact and completes its event stream", async () => {
+  const store = new RunStore();
+  let finish!: (value: { status: string; testedSchedules: number; artifact: FailureArtifact }) => void;
+  const artifact: FailureArtifact = {
+    version: 2, createdAt: new Date(0).toISOString(),
+    target: { platform: "compose", composeFile: "compose.yaml" },
+    originalSchedule: { id: "original", perturbations: [] }, minimizedSchedule: { id: "minimal", perturbations: [] }, events: [],
+  };
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    search: async () => new Promise((resolve) => { finish = resolve; }),
+  });
+  const server = app.listen(0);
+  await once(server, "listening");
+  try {
+    const created = await request(app).post("/api/repositories/search").send({ repository: { kind: "checkout", path: "/project" } });
+    const port = (server.address() as { port: number }).port;
+    const events = await fetch(`http://127.0.0.1:${port}/api/runs/${created.body.runId}/events`);
+    finish({ status: "found_failure", testedSchedules: 7, artifact });
+
+    expect(await events.text()).toContain("event: completed");
+    expect((await request(app).get(`/api/runs/${created.body.runId}/report`)).body).toMatchObject({ version: 2, minimizedSchedule: { id: "minimal" } });
+    expect(store.get(created.body.runId)?.progress).toMatchObject({ phase: "completed", testedSchedules: 7 });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+it("includes terminal diagnostics in repository-search SSE events", async () => {
+  const store = new RunStore();
+  const app = createApp(store, new RunService(store, async () => ({ status: "no_failure" })), {
+    search: async () => ({
+      status: "needs_configuration",
+      testedSchedules: 2,
+      diagnostics: [{ code: "configuration_required", message: "dsrd.yaml is required" }],
+    }),
+  });
+  const server = app.listen(0);
+  await once(server, "listening");
+  try {
+    const created = await request(app).post("/api/repositories/search").send({ repository: { kind: "checkout", path: "/project" } });
+    const port = (server.address() as { port: number }).port;
+    const stream = await fetch(`http://127.0.0.1:${port}/api/runs/${created.body.runId}/events`);
+    const text = await stream.text();
+    expect(text).toContain("event: needs_configuration");
+    expect(text).toContain('"testedSchedules":2');
+    expect(text).toContain('"configuration_required"');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
 });
 
 it("returns an uploaded run and reports that an unfinished artifact is unavailable", async () => {

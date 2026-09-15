@@ -70,6 +70,26 @@ class RecordingExecutor implements ComposeScheduleExecutor {
 }
 
 describe("ComposeExecutionPlatform", () => {
+  it("rejects Compose configurations that declare external volumes", async () => {
+    const runner: CommandRunner = {
+      async run() {
+        return {
+          stdout: JSON.stringify({
+            services: { api: { volumes: ["shared-data:/var/lib/app"] } },
+            volumes: { "shared-data": { external: true } },
+          }),
+          stderr: "",
+          exitCode: 0,
+        };
+      },
+    };
+    const discovery = new DockerComposeServiceDiscovery({ projectDirectory: "/workspace/fixture", runner });
+
+    await expect(discovery.discoverServices(target)).rejects.toThrow(
+      "Compose configuration declares external volumes: shared-data",
+    );
+  });
+
   it("loads Compose service dependencies from docker compose config", async () => {
     const runner = new ConfigRunner();
     const discovery = new DockerComposeServiceDiscovery({
@@ -170,6 +190,27 @@ describe("ComposeExecutionPlatform", () => {
       { id: "s1", services: ["postgres", "api", "worker"] },
       { id: "replay:s1", services: ["postgres", "api", "worker"] }
     ]);
+  });
+
+  it("allocates a fresh opaque attempt ID for each execution of the same schedule", async () => {
+    const executor = new RecordingExecutor();
+    const attemptIds: string[] = [];
+    const platform = new ComposeExecutionPlatform({
+      discovery: new RecordingDiscovery(),
+      executorFor: (_target, attemptId) => {
+        attemptIds.push(attemptId ?? "");
+        return executor;
+      },
+    });
+    const schedule = { id: "repeatable-schedule", perturbations: [] };
+
+    await platform.run(target, schedule);
+    await platform.run(target, schedule);
+    await platform.replay(target, schedule);
+
+    expect(attemptIds).toHaveLength(3);
+    expect(new Set(attemptIds).size).toBe(3);
+    expect(attemptIds).not.toContain(schedule.id);
   });
 
   it("rejects readiness perturbations unless the platform exposes that capability", async () => {

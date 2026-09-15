@@ -1,7 +1,7 @@
 import { initialProgress, type ProgressEvent } from "./contracts.js";
-import type { FailureArtifact } from "@dsrd/contracts";
+import { redactSecrets, type FailureArtifact, type RunDiagnostic } from "@dsrd/contracts";
 
-export type RunRecord = { id: string; progress: ProgressEvent; artifact?: FailureArtifact; error?: string };
+export type RunRecord = { id: string; progress: ProgressEvent; artifact?: FailureArtifact; diagnostics?: RunDiagnostic[]; error?: string };
 export class RunStore {
   private readonly runs = new Map<string, RunRecord>();
   private readonly subscribers = new Map<string, Set<(event: ProgressEvent) => void>>();
@@ -14,7 +14,8 @@ export class RunStore {
   }
   get(id: string): RunRecord | undefined { return this.runs.get(id); }
   setArtifact(id: string, artifact: FailureArtifact): void { this.require(id).artifact = artifact; }
-  setError(id: string, error: string): void { this.require(id).error = error; }
+  setDiagnostics(id: string, diagnostics: RunDiagnostic[]): void { this.require(id).diagnostics = diagnostics.map((diagnostic) => ({ ...diagnostic, message: redactSecrets(diagnostic.message) })); }
+  setError(id: string, error: string): void { this.require(id).error = redactSecrets(error); }
   subscribe(id: string, listener: (event: ProgressEvent) => void): () => void {
     const listeners = this.subscribers.get(id) ?? new Set();
     listeners.add(listener); this.subscribers.set(id, listeners);
